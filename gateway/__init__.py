@@ -1,0 +1,1 @@
+"""Portable gateway adapter implementations."""
