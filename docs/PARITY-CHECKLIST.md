@@ -7,13 +7,17 @@ or credential may be committed.
 | Capability | Fixture acceptance command | Local-overlay exit criterion | Status |
 | --- | --- | --- | --- |
 | Mock chat completion | `make demo-smoke` | Not applicable | Passing |
-| OpenAI streaming | `uv run pytest tests/contract/test_streaming.py` | Response framing matches fixture | Not started |
-| OpenAI tools | `uv run pytest tests/contract/test_tools.py` | Tool request/result protocol matches fixture | Not started |
-| Generic OpenAI adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
-| Anthropic-compatible adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
+| Gateway-boundary streaming | `make adapter-contract` | Raw SSE framing matches adapter fixtures | Fixture-passing |
+| Gateway-boundary tools | `make adapter-contract` | Tool request/result protocol matches adapter fixtures | Fixture-passing |
+| Generic OpenAI adapter | `make adapter-contract` | `make adapter-diagnostic` passes manually | Fixture-passing |
+| Anthropic-compatible adapter | `make adapter-contract` | `make adapter-diagnostic` passes manually | Fixture-passing |
 | Local overlay selection | `uv run pytest tests/test_config.py` | Explicit provider selection builds only approved adapters | Fixture-passing |
-| Local runtime | `make native-smoke` | Loopback health and request test pass | Not started |
+| LiteLLM provider/model surface | `make validate` | Operator overlay renders the expected selected aliases | Fixture-passing |
+| Claude Code and Codex wiring | `make validate` | Operator side-by-side harness run matches established behavior | Pending operator acceptance |
+| Token optimization callbacks | `make validate` | Operator workload comparison preserves token and tool behavior | Pending operator acceptance |
+| Observability dashboard | Compose config and JSON validation | Operator dashboard receives their gateway telemetry | Pending operator acceptance |
+| Local runtime | `make up` | Loopback health and request test pass | Operator-selected runtime |
 
 Every newly added acceptance command must remain no-secret by default. Commands
 that contact a provider are separate, manual diagnostics with an explicit
-budget and timeout.
+confirmation and ten-second maximum timeout.

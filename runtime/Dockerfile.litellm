@@ -1,0 +1,49 @@
+# 1. Base Image: Use the official Python 3.13 Slim image (Debian-based) for better compatibility
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+# 2. System Preparation: Install required libraries and tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    libffi-dev \
+    build-essential \
+    ca-certificates \
+    jq \
+    ripgrep \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Package Management: Install 'uv' via pip
+RUN pip install --no-cache-dir uv
+
+# 4. Unified Installation: Install LiteLLM with proxy extras, CCProxy, and Prisma in one go.
+# is paired with the mounted /app/sitecustomize.py compatibility patches
+# for Claude Code /v1/messages streaming tool deltas.
+ARG LITELLM_VERSION=1.95.0
+# fastapi is pinned LAST in its own step: fastapi>=0.141 removed the private
+# get_flat_dependant that litellm's 1.95 proxy (management_v1) still imports,
+# and litellm's own pin (>=0.136.3,<1.0) is too loose to exclude it. A single
+# combined install lets the resolver keep 0.141; a trailing exact pin forces
+# the downgrade (verified: prisma + get_flat_dependant both still resolve).
+RUN uv pip install --system "litellm[proxy]==${LITELLM_VERSION}" "claude-ccproxy==1.2.0" prisma opentelemetry-api opentelemetry-sdk tenacity \
+    && uv pip install --system "fastapi==0.139.0"
+
+# 5. Workaround for LiteLLM callback import bug:
+RUN ln -s /usr/local/lib/python3.13/site-packages/ccproxy /app/ccproxy
+
+# 6. Prisma Generation: Explicitly generate Prisma client
+# Using the schema from the installed litellm package
+RUN prisma generate --schema /usr/local/lib/python3.13/site-packages/litellm/proxy/schema.prisma
+
+# 7. Set Environment Variables for Prisma/LiteLLM compatibility
+ENV USE_PRISMA_MIGRATE=True
+ENV LITELLM_MIGRATION_DIR=/app/migrations
+ENV PRISMA_BINARY_CACHE_DIR=/tmp/prisma
+
+# Ensure the migrations directory exists and is writable
+RUN mkdir -p /app/migrations /tmp/prisma && chmod -R 777 /app/migrations /tmp/prisma
+
+# Set the default entrypoint
+ENTRYPOINT ["litellm"]

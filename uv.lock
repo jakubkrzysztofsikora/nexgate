@@ -21,8 +21,8 @@ wheels = [
 ]
 
 [[package]]
-name = "model-gate-public-baseline"
-version = "0.0.0"
+name = "nexgate"
+version = "0.1.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]

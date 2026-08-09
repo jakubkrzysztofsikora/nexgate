@@ -13,6 +13,8 @@ need() {
 need git
 need docker
 need uv
+need jq
+need openssl
 docker compose version >/dev/null 2>&1 || { echo "missing: Docker Compose v2" >&2; failures=1; }
 python3 - <<'PY'
 import sys

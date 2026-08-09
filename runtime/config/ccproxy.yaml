@@ -1,0 +1,6 @@
+ccproxy:
+  default_model_passthrough: true
+  hooks:
+    - ccproxy.hooks.rule_evaluator
+    - ccproxy.hooks.model_router
+    - ccproxy_callback.forward_provider_oauth

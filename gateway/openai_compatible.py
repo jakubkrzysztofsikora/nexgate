@@ -72,7 +72,7 @@ class OpenAICompatibleAdapter:
             # Provider error bodies can reflect prompts or internal diagnostics.
             exc.close()
             raise UpstreamError(exc.code, f"upstream HTTP {exc.code}") from exc
-        except URLError as exc:
+        except (TimeoutError, URLError) as exc:
             raise UpstreamError(None, "upstream connection failed") from exc
 
     def complete(self, payload: dict) -> dict:

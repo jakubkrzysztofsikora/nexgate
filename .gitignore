@@ -1,9 +1,12 @@
 .env
 .env.*
 !.env.demo.example
+!.env.nexgate.example
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
 reports/
+.devcontainer/.env
+runtime/state/

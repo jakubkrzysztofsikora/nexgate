@@ -1,0 +1,86 @@
+name: nexgate
+
+services:
+  litellm:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile.litellm
+    command: ["--config=/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    env_file: ${NEXGATE_ENV_FILE:-.env.nexgate.example}
+    environment:
+      DATABASE_URL: postgresql://nexgate:${POSTGRES_PASSWORD}@db:5432/nexgate
+      REDIS_HOST: redis
+      LITELLM_LOG: INFO
+    ports:
+      - "127.0.0.1:${NEXGATE_PORT:-4000}:4000"
+    volumes:
+      - ./runtime/state/litellm.yaml:/app/config.yaml:ro
+      - ./runtime/state/chatgpt:/root/.config/litellm/chatgpt
+      - ./runtime/config/ccproxy.yaml:/app/ccproxy.yaml:ro
+      - ./runtime/config/ccproxy_callback.py:/app/ccproxy_callback.py:ro
+      - ./runtime/config/claude_aware_compression.py:/app/claude_aware_compression.py:ro
+      - ./runtime/config/sitecustomize.py:/app/sitecustomize.py:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nexgate
+      POSTGRES_DB: nexgate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexgate -d nexgate"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=15d"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./runtime/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./runtime/config/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

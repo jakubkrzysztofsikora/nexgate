@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If NexGate helps your work, please cite this repository."
+title: "NexGate"
+version: 0.1.0
+date-released: 2026-08-09
+license: MIT
+authors:
+  - family-names: Sikora
+    given-names: Jakub
+repository-code: "https://github.com/jakubkrzysztofsikora/nexgate"

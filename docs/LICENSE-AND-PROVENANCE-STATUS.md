@@ -1,10 +1,18 @@
-# License And Provenance Status
+# License And Provenance
 
-No root license is selected for this private candidate repository. It is not a
-publication decision.
+This repository is licensed under the [MIT License](../LICENSE). The included
+source is a clean-root public baseline: it does not import prior repository
+history, credentials, database archives, personal configuration, private
+endpoints, LFS objects, Gitlinks, or operational overlays.
 
-Before a public candidate receives `LICENSE`, the release lead must approve a
-path-by-path manifest, identify authorship and third-party notices, resolve the
-unmapped Gitlinks, and verify license compatibility for every included source
-and release artifact. Database archives, personal configuration, and private
-operational overlays are excluded from that candidate by default.
+## Included-source Record
+
+| Path group | Origin | Review state | Publication condition |
+| --- | --- | --- | --- |
+| `gateway/`, `demo/`, `scripts/`, `tests/` | New public baseline | Reviewed for public fixtures and no private configuration | MIT license and independent clean-clone check |
+| `config/provider-catalog.yaml` | New public catalog | Providers disabled by default | Operator data-routing documentation retained |
+| `docs/`, repository metadata | New public documentation | Reviewed for public-release language | Keep release information current |
+| `uv.lock` | Resolved development tooling | Dependency policy applies | License/notice review against MIT |
+
+This record is a compatibility and provenance aid, not legal advice. Every
+release must regenerate and review its SBOM and source checksum.

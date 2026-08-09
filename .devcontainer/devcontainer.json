@@ -1,0 +1,13 @@
+{
+  "name": "Hybrid LLM Stack",
+  "image": "ghcr.io/astral-sh/uv:python3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "postCreateCommand": "uv sync --locked --group dev",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  }
+}

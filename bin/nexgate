@@ -1,0 +1,477 @@
+#!/usr/bin/env bash
+# nexgate — Install or restore Claude Code nexgate-agent (LiteLLM) wiring.
+#
+# Usage:
+#   nexgate install [PATH_TO_NEXGATE_REPO]  — wire Claude Code via LiteLLM
+#   nexgate update [PATH_TO_NEXGATE_REPO]   — pull latest source + reapply wiring
+#   nexgate restore                            — undo, restore previous settings
+#   nexgate status                             — show current wiring state
+#
+# "install" writes .claude/settings.local.json in the CWD repo so the override
+# is gitignored and scoped to this checkout. A backup of the previous file is
+# kept at .claude/settings.local.json.nexgate-backup for "restore".
+#
+# The nexgate repo's .env provides the gateway config (host, port, master key).
+# If no path is given, it auto-detects from the script's own location.
+set -euo pipefail
+
+# ── Helpers ──────────────────────────────────────────────────────────
+red='\033[31m'; green='\033[32m'; yellow='\033[33m'; cyan='\033[36m'; bold='\033[1m'; reset='\033[0m'
+ok()   { printf "  ${green}✓${reset} %s\n" "$*"; }
+warn() { printf "  ${yellow}⚠${reset} %s\n" "$*"; }
+die()  { printf "  ${red}✗${reset} %s\n" "$*" >&2; exit 1; }
+
+# ── Resolve nexgate repo ───────────────────────────────────────────
+# The script may be called via symlink (e.g. ~/.local/bin/nexgate →
+# repo/bin/nexgate). Resolve the symlink so we find the repo's .env.
+_resolve_self() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -L "$src" ]]; do
+    local dir
+    dir="$(cd "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="${dir}/${src}"
+  done
+  cd "$(dirname "$src")" && pwd
+}
+
+# Parse action first, then optional path
+ACTION="${1:-install}"
+case "$ACTION" in
+  install|update|restore|status) ;;
+  help|--help|-h)
+    echo "Usage: nexgate {install|update|restore|status} [PATH_TO_NEXGATE_REPO]"
+    echo ""
+    echo "  install  Wire Claude Code in CWD to use LiteLLM nexgate gateway"
+    echo "  update   Fast-forward source, refresh CLI symlink, reapply install"
+    echo "  restore  Undo wiring, restore previous .claude/settings.local.json"
+    echo "  status   Show current wiring state"
+    exit 0
+    ;;
+  *)
+    # Treat unknown as a path argument with default action=install
+    if [[ -d "$ACTION" ]]; then
+      NEXGATE_ROOT="$(cd "$ACTION" && pwd)"
+      ACTION="install"
+    else
+      echo "Usage: nexgate {install|update|restore|status} [PATH_TO_NEXGATE_REPO]" >&2
+      exit 1
+    fi
+    ;;
+esac
+
+# Resolve nexgate repo from script location unless path was given above
+if [[ -z "${NEXGATE_ROOT:-}" ]]; then
+  _self="$(_resolve_self)"
+  NEXGATE_ROOT="$(cd "${_self}/.." && pwd)"
+fi
+
+# Allow "nexgate install /path" and "nexgate update /path" forms
+if [[ "$ACTION" =~ ^(install|update)$ ]] && [[ -n "${2:-}" ]] && [[ -d "$2" ]]; then
+  NEXGATE_ROOT="$(cd "$2" && pwd)"
+fi
+
+TARGET_DIR="$(pwd)"
+CLAUDE_DIR="${TARGET_DIR}/.claude"
+SETTINGS_LOCAL="${CLAUDE_DIR}/settings.local.json"
+BACKUP="${SETTINGS_LOCAL}.nexgate-backup"
+PRE_NEXGATE="${SETTINGS_LOCAL}.pre-nexgate"
+
+# ── Load nexgate .env (whitelist only the keys we need) ────────────
+# Pre-set env vars win over .env values. The portable default is the local
+# NexGate endpoint; an operator may override it for a remote deployment.
+load_nexgate_env() {
+  local env_file="${NEXGATE_ROOT}/.env"
+  if [[ ! -f "$env_file" ]]; then
+    die "No .env in ${NEXGATE_ROOT} — run make configure in the NexGate repo first"
+  fi
+  while IFS='=' read -r k v; do
+    case "$k" in
+      LITELLM_HOST|LITELLM_PORT|LITELLM_MASTER_KEY|CLAUDE_CODE_DEFAULT_MODEL|CLAUDE_CODE_OPUS_MODEL|CLAUDE_CODE_SONNET_MODEL|CLAUDE_CODE_HAIKU_MODEL|LITELLM_SCHEME|CODEX_DEFAULT_MODEL|CODEX_GATEWAY_URL)
+        # Skip if already set in the environment (allows inline overrides)
+        [[ -n "$v" ]] && [[ -z "${!k:-}" ]] && printf -v "$k" '%s' "$v"
+        ;;
+    esac
+  done < "$env_file"
+}
+
+# ── Write JSON safely: write to temp, validate, then move ────────────
+safe_write_json() {
+  local target="$1" tmp
+  tmp="${target}.tmp.$$"
+  cat > "$tmp"
+  jq empty "$tmp" 2>/dev/null || { rm -f "$tmp"; die "Failed to write valid JSON to ${target}"; }
+  mv "$tmp" "$target"
+  chmod 600 "$target"
+}
+
+# ── status ───────────────────────────────────────────────────────────
+cmd_status() {
+  printf "\n${bold}NexGate Status${reset}\n\n"
+  printf "  Target:     %s\n" "$TARGET_DIR"
+  printf "  NexGate:    %s\n" "$NEXGATE_ROOT"
+
+  if [[ ! -f "$SETTINGS_LOCAL" ]]; then
+    warn "No .claude/settings.local.json — nexgate NOT wired"
+    return
+  fi
+
+  local base_url
+  base_url=$(jq -r '.env.ANTHROPIC_BASE_URL // empty' "$SETTINGS_LOCAL" 2>/dev/null || true)
+  if [[ -z "$base_url" ]]; then
+    warn "settings.local.json exists but has no ANTHROPIC_BASE_URL"
+    return
+  fi
+
+  local model
+  model=$(jq -r '.model // "default"' "$SETTINGS_LOCAL" 2>/dev/null || echo "default")
+
+  ok "Wired to ${base_url}"
+  printf "  Model: %s\n" "$model"
+
+  # Health check — use whatever scheme is in the URL
+  local host port scheme
+  scheme="${base_url%%://*}"
+  host="${base_url#*://}" host="${host%%:*}" host="${host%%/*}"
+  port="${base_url#*://}" port="${port#*:}" port="${port%%/*}"
+  if [[ "$port" == "$host" ]]; then
+    if [[ "$scheme" == "https" ]]; then
+      port=443
+    else
+      port=80
+    fi
+  fi
+  if curl -fsS "${scheme}://${host}:${port}/health/liveliness" >/dev/null 2>&1; then
+    ok "LiteLLM proxy is reachable"
+  else
+    warn "LiteLLM proxy NOT reachable at ${scheme}://${host}:${port}"
+  fi
+
+  echo
+  if [[ -f "${NEXGATE_ROOT}/scripts/provider_status.py" ]]; then
+    python3 "${NEXGATE_ROOT}/scripts/provider_status.py"
+  fi
+}
+
+# ── install ──────────────────────────────────────────────────────────
+cmd_install() {
+  load_nexgate_env
+
+  command -v jq >/dev/null 2>&1 || die "jq required (brew install jq)"
+
+  local litellm_host="${LITELLM_HOST:-127.0.0.1}"
+  local litellm_scheme="${LITELLM_SCHEME:-http}"
+  local litellm_port="${LITELLM_PORT:-4000}"
+  local master_key="${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY not set in .env}"
+  local default_model="${CLAUDE_CODE_DEFAULT_MODEL:-claude-opus-4-8[1m]}"
+  local opus_model="${CLAUDE_CODE_OPUS_MODEL:-claude-opus-4-8[1m]}"
+  local sonnet_model="${CLAUDE_CODE_SONNET_MODEL:-claude-sonnet-4-6}"
+  local haiku_model="${CLAUDE_CODE_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
+  # Omit the port when it's the scheme default so the URL stays clean
+  # (https://host/ not https://host:443).
+  if [[ -z "$litellm_port" ]] \
+    || { [[ "$litellm_scheme" == "https" && "$litellm_port" == "443" ]]; } \
+    || { [[ "$litellm_scheme" == "http" && "$litellm_port" == "80" ]]; }; then
+    local gateway_url="${litellm_scheme}://${litellm_host}"
+  else
+    local gateway_url="${litellm_scheme}://${litellm_host}:${litellm_port}"
+  fi
+
+  mkdir -p "$CLAUDE_DIR"
+
+  # ── Backup: only save if NOT already nexgate-wired ─────────────
+  # This prevents double-install from overwriting the pre-nexgate backup.
+  if [[ -f "$SETTINGS_LOCAL" ]]; then
+    local already_wired
+    already_wired=$(jq -r '.env.ANTHROPIC_BASE_URL // empty' "$SETTINGS_LOCAL" 2>/dev/null || true)
+    if [[ -z "$already_wired" ]]; then
+      # Not nexgate-wired → safe to back up as pre-nexgate state
+      cp -p "$SETTINGS_LOCAL" "$PRE_NEXGATE"
+      cp -p "$SETTINGS_LOCAL" "$BACKUP"
+      chmod 600 "$PRE_NEXGATE" "$BACKUP"
+      ok "Backed up pre-nexgate settings"
+    else
+      # Already wired → only refresh backup from the pre-nexgate snapshot
+      if [[ -f "$PRE_NEXGATE" ]]; then
+        cp -p "$PRE_NEXGATE" "$BACKUP"
+        ok "Refreshed backup from pre-nexgate snapshot"
+      else
+        # No pre-nexgate snapshot exists (first install was already wired)
+        warn "No pre-nexgate snapshot — restore will strip nexgate keys only"
+      fi
+    fi
+  fi
+
+  # ── Build the nexgate overlay ──────────────────────────────────
+  local statusline_script="${NEXGATE_ROOT}/bin/nexgate-statusline.sh"
+  local overlay
+  overlay=$(jq -n \
+    --arg base_url      "${gateway_url}" \
+    --arg auth_header   "x-litellm-api-key: Bearer ${master_key}" \
+    --arg model         "${default_model}" \
+    --arg opus_model    "${opus_model}" \
+    --arg sonnet_model  "${sonnet_model}" \
+    --arg haiku_model   "${haiku_model}" \
+    --arg statusline    "${statusline_script}" \
+    --arg mcp_script    "${NEXGATE_ROOT}/scripts/mcp_provider_status.py" \
+    '{
+       env: {
+         ANTHROPIC_BASE_URL:                      $base_url,
+         ANTHROPIC_CUSTOM_HEADERS:                $auth_header,
+         ANTHROPIC_MODEL:                         $model,
+         CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
+         CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS:  "1",
+         ANTHROPIC_DEFAULT_OPUS_MODEL:            $opus_model,
+         ANTHROPIC_DEFAULT_SONNET_MODEL:          $sonnet_model,
+         ANTHROPIC_DEFAULT_HAIKU_MODEL:           $haiku_model
+       },
+       model: $model,
+       statusLine: { type: "command", command: $statusline },
+       mcpServers: {
+         "nexgate-subscription-status": {
+           command: "python3",
+           args: [$mcp_script]
+         }
+       }
+     }')
+
+  # ── Merge with current local settings (preserving user keys, nexgate wins)
+  # Backups are for restore only. Reinstalling from the backup would discard
+  # MCP, hook, and permission edits made after the first nexgate install.
+  local merge_base=""
+  if [[ -f "$SETTINGS_LOCAL" ]]; then
+    merge_base="$SETTINGS_LOCAL"
+  elif [[ -f "$BACKUP" ]]; then
+    merge_base="$BACKUP"
+  fi
+
+  if [[ -n "$merge_base" ]]; then
+    jq --argjson overlay "$overlay" '
+      . as $orig
+      | ($orig // {}) * $overlay
+      | .env = (($orig.env // {}) + ($overlay.env // {}))
+      | .model = ($overlay.model // .model)
+    ' "$merge_base" | safe_write_json "$SETTINGS_LOCAL"
+  else
+    printf '%s\n' "$overlay" | safe_write_json "$SETTINGS_LOCAL"
+  fi
+
+  ok "Wrote ${SETTINGS_LOCAL}"
+  printf "  ${cyan}Default model:${reset} %s\n" "$default_model"
+  printf "  ${cyan}Opus override:${reset} %s\n" "$opus_model"
+  printf "  ${cyan}Sonnet override:${reset} %s\n" "$sonnet_model"
+  printf "  ${cyan}Haiku override:${reset} %s\n" "$haiku_model"
+  printf "  ${cyan}Gateway:${reset}        %s\n" "$gateway_url"
+  echo
+  printf "  Switch models in-session with: /model claude-opus-4-8[1m] | /model claude-haiku-4-5-20251001 | /model chatgpt/gpt-5.5 | /model deepseek-v4-pro[1m] | /model kimi | /model mistral\n"
+
+  # ── Ensure .claude/ is in .gitignore ─────────────────────────────
+  local gitignore="${TARGET_DIR}/.gitignore"
+  if [[ -f "$gitignore" ]] && ! grep -qxF '.claude/' "$gitignore" 2>/dev/null; then
+    printf '\n.claude/\n' >> "$gitignore"
+    ok "Added .claude/ to .gitignore"
+  elif [[ ! -f "$gitignore" ]]; then
+    printf '.claude/\n' > "$gitignore"
+    ok "Created .gitignore with .claude/"
+  fi
+
+  # ── Verify LiteLLM is reachable ──────────────────────────────────
+  if curl -fsS "${gateway_url}/health/liveliness" >/dev/null 2>&1; then
+    ok "LiteLLM proxy is healthy"
+  else
+    warn "LiteLLM proxy NOT reachable at ${gateway_url}"
+  fi
+
+  echo
+  printf "  ${bold}Run 'nexgate restore' to undo.${reset}\n"
+  echo
+  printf "  ${yellow}⚠${reset} Launch claude with ${bold}--strict-mcp-config${reset} to prevent MCP servers\n"
+  printf "  from sending requests directly to Anthropic (bypassing the gateway):\n"
+  printf "    ${cyan}claude --strict-mcp-config${reset}\n"
+
+  wire_codex "$gateway_url" "$master_key"
+}
+
+# ── wire Codex CLI (global ~/.codex/config.toml) ─────────────────────
+# Codex needs the OpenAI Responses API. LiteLLM's /v1/responses bridges every
+# served model (native chatgpt/* clean, others via chat-completions). Unlike
+# Claude Code this is a GLOBAL user config, not per-repo — model_provider/
+# model_providers are ignored in project-local .codex/config.toml.
+# The provider block is appended non-destructively; the default (ChatGPT OAuth)
+# path is left intact — select the gateway per-session with `--profile litellm`.
+wire_codex() {
+  local master_key="$2"
+  local codex_dir="${HOME}/.codex"
+  local codex_config="${codex_dir}/config.toml"
+  local codex_model="${CODEX_DEFAULT_MODEL:-chatgpt/gpt-5.6-terra}"
+  # Codex follows the same local endpoint as Claude Code by default. Operators
+  # can override it for their own remote deployment.
+  local codex_gateway="${CODEX_GATEWAY_URL:-${LITELLM_SCHEME:-http}://${LITELLM_HOST:-127.0.0.1}:${LITELLM_PORT:-4000}}"
+  local base_url="${codex_gateway%/}/v1"
+
+  command -v codex >/dev/null 2>&1 || { warn "Codex CLI not found — skipping Codex wiring"; return 0; }
+  mkdir -p "$codex_dir"
+
+  # Codex resolves env_key from its own runtime env (not from the TOML or .env),
+  # so the key must actually be present. Persist it in a 600 env file kept OUT
+  # of ~/.zshrc (dotfile repos shouldn't capture the secret), source it from
+  # ~/.zshrc via one managed line, and export to the GUI app via launchctl.
+  local codex_env="${codex_dir}/nexgate-env.zsh"
+  ( umask 177; printf 'export LITELLM_MASTER_KEY=%q\n' "$master_key" > "$codex_env" )
+  chmod 600 "$codex_env"
+  local zshrc="${HOME}/.zshrc"
+  local source_line="[ -f \"${codex_env}\" ] && source \"${codex_env}\"  # nexgate codex env"
+  if [[ ! -f "$zshrc" ]] || ! grep -qF '# nexgate codex env' "$zshrc" 2>/dev/null; then
+    printf '%s\n' "$source_line" >> "$zshrc"
+  fi
+  if command -v launchctl >/dev/null 2>&1; then
+    launchctl setenv LITELLM_MASTER_KEY "$master_key" 2>/dev/null || true
+  fi
+
+  local managed_begin="# >>> nexgate codex wiring >>>"
+  local managed_end="# <<< nexgate codex wiring <<<"
+  local block
+  block=$(cat <<EOF
+${managed_begin}
+[model_providers.litellm]
+name = "litellm"
+base_url = "${base_url}"
+env_key = "LITELLM_MASTER_KEY"
+wire_api = "responses"
+stream_idle_timeout_ms = 7200000
+stream_max_retries = 5
+request_max_retries = 4
+${managed_end}
+EOF
+)
+
+  if [[ -f "$codex_config" ]]; then
+    local ts; ts=$(date +%Y%m%d-%H%M%S)
+    cp -p "$codex_config" "${codex_config}.nexgate-backup.${ts}"
+    chmod 600 "${codex_config}.nexgate-backup.${ts}" 2>/dev/null || true
+    ls -1t "${codex_config}.nexgate-backup."* 2>/dev/null | tail -n +4 | while IFS= read -r b; do rm -f -- "$b"; done
+    # Strip any prior managed block, then append the fresh one.
+    awk -v b="$managed_begin" -v e="$managed_end" '
+      $0==b {skip=1} skip && $0==e {skip=0; next} !skip
+    ' "$codex_config" > "${codex_config}.tmp.$$"
+    printf '\n%s\n' "$block" >> "${codex_config}.tmp.$$"
+    mv "${codex_config}.tmp.$$" "$codex_config"
+  else
+    printf '%s\n' "$block" > "$codex_config"
+  fi
+
+  # Make litellm the default. Codex 0.145 dropped legacy `profile =` /
+  # `[profiles.x]`; a base-level `model` + `model_provider` IS the default.
+  # Strip legacy codex-0.144 default-profile syntax (rejected by 0.145) plus
+  # any top-level `model`/`model_provider` so we can prepend the fresh pair
+  # without TOML duplicate-key errors. `in_table` guards keys inside [tables].
+  awk '
+    /^[[:space:]]*\[/ { in_table=1 }
+    !in_table && /^[[:space:]]*(model|model_provider|profile)[[:space:]]*=/ { next }
+    { print }
+  ' "$codex_config" > "${codex_config}.tmp.$$"
+  {
+    printf 'model = "%s"  # nexgate codex default\n' "$codex_model"
+    printf 'model_provider = "litellm"  # nexgate codex default\n'
+    cat "${codex_config}.tmp.$$"
+  } > "$codex_config"
+  rm -f "${codex_config}.tmp.$$"
+  chmod 600 "$codex_config"
+
+  ok "Wired Codex → ${base_url} (default model_provider: litellm)"
+  printf "  ${cyan}Key persisted:${reset}  %s (600) + ~/.zshrc source line\n" "$codex_env"
+  printf "  This shell: ${cyan}source %s${reset}\n" "$codex_env"
+  printf "  ${cyan}Codex default:${reset}  %s\n" "$codex_model"
+  printf "  Gateway is now the default. Override per-run: ${cyan}codex -c model_provider=litellm -m glm-5.2${reset}\n"
+}
+
+# ── restore ──────────────────────────────────────────────────────────
+cmd_restore() {
+  local restored=false
+
+  # Strip the managed Codex block from the global config (leaves the rest).
+  local codex_config="${HOME}/.codex/config.toml"
+  if [[ -f "$codex_config" ]] && grep -q '# >>> nexgate codex wiring >>>' "$codex_config" 2>/dev/null; then
+    awk '
+      /# >>> nexgate codex wiring >>>/ {skip=1} skip && /# <<< nexgate codex wiring <<</ {skip=0; next}
+      /# nexgate codex default$/ {next}
+      !skip
+    ' "$codex_config" > "${codex_config}.tmp.$$" && mv "${codex_config}.tmp.$$" "$codex_config"
+    chmod 600 "$codex_config"
+    ok "Removed nexgate Codex wiring from ${codex_config}"
+  fi
+  # Tear down the persisted Codex key (env file + ~/.zshrc source line + GUI).
+  local codex_env="${HOME}/.codex/nexgate-env.zsh"
+  [[ -f "$codex_env" ]] && { rm -f "$codex_env"; ok "Removed ${codex_env}"; }
+  local zshrc="${HOME}/.zshrc"
+  if [[ -f "$zshrc" ]] && grep -qF '# nexgate codex env' "$zshrc" 2>/dev/null; then
+    awk '!/# nexgate codex env/' "$zshrc" > "${zshrc}.tmp.$$" && mv "${zshrc}.tmp.$$" "$zshrc"
+    ok "Removed nexgate Codex env source line from ~/.zshrc"
+  fi
+  command -v launchctl >/dev/null 2>&1 && launchctl unsetenv LITELLM_MASTER_KEY 2>/dev/null || true
+
+  if [[ -f "$PRE_NEXGATE" ]]; then
+    mv "$PRE_NEXGATE" "$SETTINGS_LOCAL"
+    rm -f "$BACKUP"
+    ok "Restored pre-nexgate settings.local.json"
+    restored=true
+  elif [[ -f "$BACKUP" ]]; then
+    mv "$BACKUP" "$SETTINGS_LOCAL"
+    ok "Restored previous settings.local.json from backup"
+    restored=true
+  fi
+
+  # Unregister nexgate statusline module
+  if command -v statusline >/dev/null 2>&1; then
+    statusline remove nexgate 2>/dev/null || true
+  fi
+
+  if [[ "$restored" == "true" ]]; then
+    return
+  fi
+
+  # No backup found — strip nexgate keys only if file exists
+  if [[ -f "$SETTINGS_LOCAL" ]]; then
+    local has_jq
+    has_jq=$(command -v jq >/dev/null 2>&1 && echo yes || echo no)
+    if [[ "$has_jq" == "yes" ]]; then
+      jq 'del(.env.ANTHROPIC_BASE_URL, .env.ANTHROPIC_CUSTOM_HEADERS, .env.ANTHROPIC_MODEL, .env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, .env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS, .env.ANTHROPIC_DEFAULT_OPUS_MODEL, .env.ANTHROPIC_DEFAULT_SONNET_MODEL, .env.ANTHROPIC_DEFAULT_HAIKU_MODEL) | del(.model) | del(.statusLine)' \
+        "$SETTINGS_LOCAL" | safe_write_json "$SETTINGS_LOCAL"
+      ok "Stripped nexgate env vars from settings.local.json"
+    else
+      rm -f "$SETTINGS_LOCAL"
+      warn "Removed settings.local.json (install jq for clean restore)"
+    fi
+  else
+    warn "Nothing to restore — no settings.local.json or backup found"
+  fi
+}
+
+# ── update ───────────────────────────────────────────────────────────
+cmd_update() {
+  if git -C "$NEXGATE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -n "$(git -C "$NEXGATE_ROOT" status --porcelain)" ]]; then
+      warn "Source repo has local changes; skipping git pull"
+    else
+      git -C "$NEXGATE_ROOT" pull --ff-only
+      ok "Updated source repo"
+    fi
+  else
+    warn "Source path is not a git repo; skipping git pull"
+  fi
+
+  local install_dir="${HOME}/.local/bin"
+  mkdir -p "$install_dir"
+  ln -sfn "${NEXGATE_ROOT}/bin/nexgate" "${install_dir}/nexgate"
+  ok "Refreshed ${install_dir}/nexgate"
+
+  cmd_install
+}
+
+# ── Main dispatch ────────────────────────────────────────────────────
+case "${ACTION}" in
+  install)  cmd_install  ;;
+  update)   cmd_update   ;;
+  restore)  cmd_restore  ;;
+  status)   cmd_status   ;;
+esac

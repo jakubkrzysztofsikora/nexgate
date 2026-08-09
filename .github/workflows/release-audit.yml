@@ -1,0 +1,39 @@
+name: Release Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type audit-release-artifacts to generate unpublished audit artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: inputs.confirm == 'audit-release-artifacts'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
+      - uses: anchore/sbom-action@aa0e114b2e19480f157109b9922bda359bd98b90 # v0.20.8
+        with:
+          path: .
+          format: spdx-json
+          output-file: reports/release-audit/sbom.spdx.json
+      - name: Install locked validation tools
+        run: uv sync --locked --group dev
+      - name: Validate and scan the source archive
+        run: uv run make release-audit
+      - name: Upload unpublished audit artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-audit
+          path: reports/release-audit/
+          if-no-files-found: error

@@ -13,7 +13,7 @@ class ConfigurationError(ValueError):
     pass
 
 
-def adapter_from_environment(environment: Mapping[str, str] | None = None):
+def adapter_from_environment(environment: Mapping[str, str] | None = None, *, timeout_seconds: float = 30.0):
     env = os.environ if environment is None else environment
     provider = env.get("GATEWAY_PROVIDER", "")
     if not provider:
@@ -22,7 +22,7 @@ def adapter_from_environment(environment: Mapping[str, str] | None = None):
         base_url, api_key = env.get("OPENAI_COMPATIBLE_BASE_URL", ""), env.get("OPENAI_COMPATIBLE_API_KEY", "")
         if not base_url or not api_key:
             raise ConfigurationError("openai-compatible requires OPENAI_COMPATIBLE_BASE_URL and OPENAI_COMPATIBLE_API_KEY")
-        config = OpenAICompatibleConfig(base_url, api_key)
+        config = OpenAICompatibleConfig(base_url, api_key, timeout_seconds)
         try:
             config.chat_completions_url()
         except ValueError as exc:
@@ -32,7 +32,7 @@ def adapter_from_environment(environment: Mapping[str, str] | None = None):
         base_url, api_key = env.get("ANTHROPIC_COMPATIBLE_BASE_URL", ""), env.get("ANTHROPIC_COMPATIBLE_API_KEY", "")
         if not base_url or not api_key:
             raise ConfigurationError("anthropic-compatible requires ANTHROPIC_COMPATIBLE_BASE_URL and ANTHROPIC_COMPATIBLE_API_KEY")
-        config = AnthropicCompatibleConfig(base_url, api_key)
+        config = AnthropicCompatibleConfig(base_url, api_key, timeout_seconds=timeout_seconds)
         try:
             config.messages_url()
         except ValueError as exc:

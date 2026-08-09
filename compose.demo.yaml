@@ -1,4 +1,4 @@
-name: model-gate-demo
+name: nexgate-demo
 
 services:
   demo-gateway:

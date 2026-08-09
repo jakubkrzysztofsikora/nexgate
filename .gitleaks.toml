@@ -1,0 +1,8 @@
+# Local overlays and rendered runtime configuration intentionally contain the
+# operator's secrets and are ignored by Git. Scan committed templates instead.
+[allowlist]
+paths = [
+  '''^\.env$''',
+  '''^\.env\.demo$''',
+  '''^runtime/state/''',
+]

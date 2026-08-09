@@ -1,8 +1,18 @@
 [project]
-name = "model-gate-public-baseline"
-version = "0.0.0"
-description = "Offline validation tooling for the portable public baseline"
+name = "nexgate"
+version = "0.1.0"
+description = "LLM gateway fixtures and adapters with offline local validation"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12,<3.15"
+authors = [{ name = "Jakub Sikora" }]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+]
 dependencies = []
 
 [dependency-groups]

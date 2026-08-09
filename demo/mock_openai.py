@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ModelGateDemo/0.1"
+    server_version = "NexGateDemo/0.1"
 
     def log_message(self, _format: str, *_args: object) -> None:
         # Avoid logging bearer tokens or request bodies in the demo container.

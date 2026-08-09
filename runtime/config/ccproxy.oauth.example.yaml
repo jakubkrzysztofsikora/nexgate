@@ -1,0 +1,5 @@
+# Optional Claude Code OAuth source. Copy the relevant block to an untracked
+# local overlay only when the operator elects to use their local Claude session.
+ccproxy:
+  oat_sources:
+    anthropic: "jq -r '.claudeAiOauth.accessToken' ~/.claude/.credentials.json"
