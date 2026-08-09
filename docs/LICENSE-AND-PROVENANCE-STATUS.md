@@ -1,7 +1,7 @@
 # License And Provenance Status
 
-No root license is selected for this private legacy tree. The former README
-license assertion is not a publication decision.
+No root license is selected for this private candidate repository. It is not a
+publication decision.
 
 Before a public candidate receives `LICENSE`, the release lead must approve a
 path-by-path manifest, identify authorship and third-party notices, resolve the

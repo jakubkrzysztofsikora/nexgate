@@ -15,13 +15,13 @@ Git history is never imported.
 | Archives, logs, state, credentials | Excluded | Never copy or commit. |
 | Gitlinks and vendored trees | Excluded | Require provenance/license approval. |
 
-## Functional-Parity Definition
+## Target Functional-Parity Definition
 
-Parity is behavior, not copied personal configuration: the candidate accepts
-OpenAI-compatible requests, streams responses, handles tools, and validates
-each adopted adapter with fake fixtures. A developer may create an untracked
-overlay containing their own endpoint and credentials; it is never needed for
-`make validate`.
+Parity is behavior, not copied personal configuration. The current candidate
+implements only authenticated mock chat completion. Streaming, tool protocol,
+and adapters are future gates defined in `docs/PARITY-CHECKLIST.md`. A
+developer may create an untracked overlay containing their own endpoint and
+credentials; it is never needed for `make validate`.
 
 Do not change visibility until credential rotation, clean-history export, LFS
 retention/purge, Gitlink provenance, license approval, and independent
