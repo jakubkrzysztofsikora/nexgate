@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -euo pipefail -c
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor tools configure demo demo-down validate parity-report
+.PHONY: help doctor tools configure demo demo-down demo-smoke validate parity-report
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -16,6 +16,8 @@ demo: ## Start the loopback-only mock OpenAI-compatible demo
 	@./scripts/demo.sh up
 demo-down: ## Stop the isolated local demo
 	@./scripts/demo.sh down
+demo-smoke: ## Verify the authenticated mock endpoint and chat contract
+	@./scripts/demo-smoke.sh
 validate: ## Run all offline candidate checks
 	@./scripts/validate.sh
 parity-report: ## Show migration parity status without reading private credentials

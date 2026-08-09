@@ -6,7 +6,7 @@ or credential may be committed.
 
 | Capability | Fixture acceptance command | Local-overlay exit criterion | Status |
 | --- | --- | --- | --- |
-| Mock chat completion | `make demo` plus authenticated `/v1/chat/completions` | Not applicable | Passing |
+| Mock chat completion | `make demo-smoke` | Not applicable | Passing |
 | OpenAI streaming | `uv run pytest tests/contract/test_streaming.py` | Response framing matches fixture | Not started |
 | OpenAI tools | `uv run pytest tests/contract/test_tools.py` | Tool request/result protocol matches fixture | Not started |
 | Generic OpenAI adapter | `uv run pytest tests/adapters/test_openai_compatible.py` | Operator endpoint passes bounded diagnostic | Not started |

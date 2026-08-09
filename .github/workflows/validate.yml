@@ -20,4 +20,4 @@ jobs:
       - name: Install locked validation tools
         run: uv sync --locked --group dev
       - name: Validate without secrets or live services
-        run: uv run make validate
+        run: uv run make validate demo-smoke
