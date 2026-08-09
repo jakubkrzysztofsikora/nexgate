@@ -1,0 +1,19 @@
+# Public provider catalog. Every remote provider is disabled until an operator
+# supplies its own credentials in an untracked private overlay.
+version: 1
+providers:
+  openai-compatible:
+    enabled: false
+    required_environment: [OPENAI_COMPATIBLE_BASE_URL, OPENAI_COMPATIBLE_API_KEY]
+    capabilities: [chat, streaming, tools]
+    data_routing: Operator-selected endpoint; review its privacy policy.
+  anthropic-compatible:
+    enabled: false
+    required_environment: [ANTHROPIC_COMPATIBLE_BASE_URL, ANTHROPIC_COMPATIBLE_API_KEY]
+    capabilities: [messages, streaming, tools]
+    data_routing: Operator-selected endpoint; review its privacy policy.
+  local-openai-compatible:
+    enabled: false
+    required_environment: [LOCAL_OPENAI_BASE_URL]
+    capabilities: [chat, streaming]
+    data_routing: Local network endpoint selected by the operator.

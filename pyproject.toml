@@ -1,0 +1,14 @@
+[project]
+name = "model-gate-public-baseline"
+version = "0.0.0"
+description = "Offline validation tooling for the portable public baseline"
+requires-python = ">=3.12,<3.15"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest==9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
