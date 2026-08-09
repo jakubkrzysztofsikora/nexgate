@@ -21,6 +21,6 @@ demo-smoke: ## Verify the authenticated mock endpoint and chat contract
 validate: ## Run all offline candidate checks
 	@./scripts/validate.sh
 adapter-contract: ## Run generic OpenAI-compatible adapter fixtures
-	@PYTHONPATH=. uv run pytest -q tests/adapters/test_openai_compatible.py
+	@PYTHONPATH=. uv run pytest -q tests/adapters
 parity-report: ## Show migration parity status without reading private credentials
 	@./scripts/parity-report.sh

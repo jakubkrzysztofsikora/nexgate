@@ -10,6 +10,7 @@ Git history is never imported.
 | Provider catalog | Present | Disabled by default; no personal endpoints or policy. |
 | Gateway callback source | Pending review | Copy only with fixtures and no account/OAuth behavior. |
 | Generic OpenAI-compatible adapter | Fixture-passing | Fake upstream covers tools, SSE, and HTTP errors. |
+| Anthropic-compatible adapter | Fixture-passing | Fake upstream covers tools, SSE, and HTTP errors. |
 | Other provider adapters | Pending review | One family at a time, fake-upstream tests first. |
 | Local/native runtime | Pending review | Explicit opt-in and loopback default. |
 | Cloud, Tailnet, observability | Private-only | May become opt-in modules later. |

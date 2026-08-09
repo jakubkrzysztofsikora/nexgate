@@ -10,7 +10,7 @@ or credential may be committed.
 | OpenAI streaming | `uv run pytest tests/contract/test_streaming.py` | Response framing matches fixture | Not started |
 | OpenAI tools | `uv run pytest tests/contract/test_tools.py` | Tool request/result protocol matches fixture | Not started |
 | Generic OpenAI adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
-| Anthropic-compatible adapter | `uv run pytest tests/adapters/test_anthropic_compatible.py` | Operator endpoint passes bounded diagnostic | Not started |
+| Anthropic-compatible adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
 | Local runtime | `make native-smoke` | Loopback health and request test pass | Not started |
 
 Every newly added acceptance command must remain no-secret by default. Commands
