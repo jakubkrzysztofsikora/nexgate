@@ -7,7 +7,7 @@ import json
 from typing import Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -67,7 +67,7 @@ class OpenAICompatibleAdapter:
 
     def _open(self, payload: dict):
         try:
-            return build_opener(_NoRedirect()).open(self._request(payload), timeout=self._config.timeout_seconds)
+            return build_opener(_NoRedirect(), ProxyHandler({})).open(self._request(payload), timeout=self._config.timeout_seconds)
         except HTTPError as exc:
             # Provider error bodies can reflect prompts or internal diagnostics.
             exc.close()

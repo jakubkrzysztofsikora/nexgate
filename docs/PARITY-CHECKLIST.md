@@ -11,6 +11,7 @@ or credential may be committed.
 | OpenAI tools | `uv run pytest tests/contract/test_tools.py` | Tool request/result protocol matches fixture | Not started |
 | Generic OpenAI adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
 | Anthropic-compatible adapter | `make adapter-contract` | Operator endpoint passes bounded diagnostic | Fixture-passing |
+| Local overlay selection | `uv run pytest tests/test_config.py` | Explicit provider selection builds only approved adapters | Fixture-passing |
 | Local runtime | `make native-smoke` | Loopback health and request test pass | Not started |
 
 Every newly added acceptance command must remain no-secret by default. Commands

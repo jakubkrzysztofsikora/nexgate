@@ -12,8 +12,3 @@ providers:
     required_environment: [ANTHROPIC_COMPATIBLE_BASE_URL, ANTHROPIC_COMPATIBLE_API_KEY]
     capabilities: [messages, streaming, tools]
     data_routing: Operator-selected endpoint; review its privacy policy.
-  local-openai-compatible:
-    enabled: false
-    required_environment: [LOCAL_OPENAI_BASE_URL]
-    capabilities: [chat, streaming]
-    data_routing: Local network endpoint selected by the operator.

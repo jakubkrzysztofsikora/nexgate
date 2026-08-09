@@ -7,7 +7,7 @@ import json
 from typing import Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, build_opener
+from urllib.request import ProxyHandler, Request, build_opener
 
 from gateway.openai_compatible import MAX_RESPONSE_BYTES, UpstreamError, _NoRedirect
 
@@ -43,7 +43,7 @@ class AnthropicCompatibleAdapter:
             method="POST",
         )
         try:
-            return build_opener(_NoRedirect()).open(request, timeout=self._config.timeout_seconds)
+            return build_opener(_NoRedirect(), ProxyHandler({})).open(request, timeout=self._config.timeout_seconds)
         except HTTPError as exc:
             exc.close()
             raise UpstreamError(exc.code, f"upstream HTTP {exc.code}") from exc
