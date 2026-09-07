@@ -3,98 +3,144 @@
 [![Validate](https://github.com/jakubkrzysztofsikora/nexgate/actions/workflows/validate.yml/badge.svg)](https://github.com/jakubkrzysztofsikora/nexgate/actions/workflows/validate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0f766e.svg)](LICENSE)
 
-NexGate is a portable, self-hosted AI gateway and optimization plane. It
-packages the proven LiteLLM, ccproxy, Claude Code, Codex, token-optimization,
-and observability layers into an operator-owned stack: add your provider
-credentials or local model endpoints, then route your harnesses through one
-gateway.
+NexGate is a self-hosted AI gateway: one local endpoint that fronts every
+model provider you use, with automatic fallback when a provider dies
+mid-session.
 
-The offline demo and validation path require no provider account or API key.
-Live provider use requires the operator's own endpoint and credentials; NexGate
-never ships a provider account, endpoint, model-runtime download, or personal
-deployment topology.
+[Why](#why) •
+[Quickstart](#quickstart) •
+[Wire your tools](#wire-your-tools) •
+[When a provider fails](#when-a-provider-fails) •
+[What is included](#what-is-included) •
+[Commands](#commands) •
+[Scope](#scope-and-security)
 
-The project is intentionally conservative: remote providers are disabled by
-default, tests use local fake upstreams, redirects never receive credentials,
-and manual provider probes are explicit and bounded.
+## Why
 
-## Start Here
+You use Claude Code, Codex, or any agent CLI. You have more than one model
+provider — subscriptions, API keys, a local model. Then this happens:
 
-Prerequisites: Docker Desktop or Docker Engine with Compose v2, Python 3.12+
-and [uv](https://docs.astral.sh/uv/).
+- A subscription quota runs out mid-task and the session dies.
+- Every tool needs its own provider config. They drift. You forget which.
+- Switching providers means rewiring every client by hand.
+- No single place shows what was spent where.
+
+NexGate replaces all of that with one endpoint on your machine:
+
+- **One URL** // every OpenAI- or Anthropic-compatible client works unchanged
+- **Fallback chains** // quota hit or outage transparently retries the next provider
+- **Model names as policy** // `claude-opus-4-8[1m]` and friends route to whatever you configured
+- **Subscriptions count** // reuse the Claude Code / ChatGPT logins you already pay for
+- **Spend in one place** // per-model cost tracking, Prometheus + Grafana dashboards
+- **Yours** // no third-party relay sees your traffic; keys never leave your host
+
+## Who this is for
+
+Ideal user: a developer who already pays for two or more AI providers, runs
+their own machines (homelab, VPS, or a beefy laptop), and uses agent CLIs
+daily. You want provider choice without rewiring your tools, and you'd rather
+debug a docker compose stack than open a support ticket.
+
+Ideal use case: point Claude Code, Codex, OpenCode, Cline, or your own scripts
+at `http://127.0.0.1:4000`. Pick models by name. When Anthropic rate-limits
+your OAuth token at 15:00, the gateway retries the next provider in the chain
+and your agent keeps working. You check Grafana to see what it cost.
+
+Not for you if: you want a hosted service, a one-click installer with no
+Docker, or a provider account included. NexGate ships the gateway, not the
+models or the credentials.
+
+## Quickstart
+
+Prerequisites: Docker with Compose v2, Python 3.12+, [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --locked --group dev
-make doctor
-make configure
-# Edit .env: add only the provider keys and API bases you intend to use.
+make doctor          # check prerequisites, no secrets needed
+make configure       # writes an ignored .env with generated local passwords
+# Edit .env: add ONLY the provider keys/bases you actually use.
 make up
 ```
 
-`make configure` writes an ignored `.env` with unique gateway, database, and
-Grafana passwords plus placeholders for every supported provider/model route.
-`make up` renders only routes whose required values are configured and exposes
-the gateway at `127.0.0.1:4000`. Stop it with `make down`.
+The gateway is now on `127.0.0.1:4000`. Providers with missing values are
+simply not rendered — an incomplete `.env` cannot receive traffic. Stop with
+`make down`.
 
-For an account-free smoke test, run `make configure-demo`, `make demo`, and
-`make demo-smoke`; the mock is loopback-only and never contacts an external
-service.
+No provider account at all? The demo runs a loopback-only mock:
 
-## What Is Included
+```bash
+make configure-demo && make demo && make demo-smoke
+```
+
+## Wire your tools
+
+| Tool | How |
+| --- | --- |
+| Claude Code | `bin/nexgate install /path/to/project` writes the gateway overlay (`ANTHROPIC_BASE_URL` + key). `bin/nexgate restore` undoes it. |
+| Codex | Same installer wires a LiteLLM Responses-API provider into your Codex profile, reversibly. |
+| Anything else | Point it at `http://127.0.0.1:4000` with your `LITELLM_MASTER_KEY`. OpenAI and Anthropic request shapes are both accepted. |
+
+Example — Anthropic shape through the gateway:
+
+```bash
+curl http://127.0.0.1:4000/v1/messages \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"glm-5.3-flash","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}'
+```
+
+## When a provider fails
+
+Every model name maps to an ordered fallback chain (see
+`runtime/config/litellm.yaml.tmpl`). Example: `claude-fable-5-1` tries your
+Anthropic OAuth token first; on a quota error it walks to ChatGPT, then Kimi,
+then Qwen, then GLM — and the client just sees a slower response, not an
+error. Chains are policy: edit the template, re-render, restart.
+
+## What is included
 
 | Area | What it provides | Default posture |
 | --- | --- | --- |
-| LiteLLM gateway | Multi-provider model catalog, routing, fallbacks, and Responses API | Localhost only by default |
-| Provider/model catalog | 66 portable aliases from the proven stack | Rendered only when required values are supplied |
-| Claude Code | Gateway settings overlay, model overrides, ccproxy hooks, and strict-MCP guidance | Operator installs into a chosen project |
-| Codex | Managed LiteLLM Responses API provider and reversible user config | Operator installs into their Codex profile |
-| Token optimization | Claude-aware compression, request sanitization, tool/search recovery, and compatibility patches | Included in the LiteLLM runtime |
-| Observability | Prometheus plus provisioned Grafana LiteLLM dashboard | Opt in with `make observability` |
-
-## Provider Adapters
-
-Copy the generated `.env` values into your own secret manager if preferred,
-then add the API keys and API bases for the providers you want to use. NexGate
-renders only fully configured routes, so an incomplete provider entry cannot
-silently receive traffic. The complete configuration is in
-`runtime/config/litellm.yaml.tmpl`; its generated form remains ignored.
-
-Provider use is optional and outside the quickstart. Operators remain
-responsible for the endpoint's privacy, retention, cost, and access policies.
+| LiteLLM gateway | Multi-provider model catalog, routing, fallbacks, Responses API | Localhost only |
+| Provider catalog | 66 portable aliases; only configured routes render | Opt-in per provider |
+| Claude Code / Codex | Wiring overlays, model overrides, ccproxy hooks | Installed by you, reversible |
+| Token optimization | Claude-aware compression, request sanitization, tool-call recovery | In the LiteLLM runtime |
+| Observability | Prometheus + provisioned Grafana dashboard | `make observability` |
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `make doctor` | Check the local prerequisites without reading `.env`. |
+| `make doctor` | Check prerequisites without reading `.env`. |
 | `make configure` | Create an ignored operator `.env` with generated local credentials. |
-| `make up` / `make down` | Render configured routes and start or stop LiteLLM, Postgres, and Redis. |
-| `make observability` | Start the stack with Prometheus and Grafana dashboards. |
-| `bin/nexgate install /path/to/project` | Wire a project for Claude Code and the user profile for Codex. |
-| `bin/nexgate restore` | Reversibly remove the Claude Code and Codex wiring. |
-| `make configure-demo` | Create the isolated credential for the account-free mock demo. |
-| `make demo` / `make demo-down` | Start or stop the loopback-only mock gateway. |
-| `make demo-smoke` | Verify the authenticated demo contract. |
-| `make validate` | Run all offline validation, with a sanitized environment. |
-| `make adapter-contract` | Run streaming, tool-call, and error-handling adapter fixtures. |
-| `make hooks` | Install the staged Gitleaks secret-prevention hook. |
-| `make secrets` | Scan tracked content and reachable Git history. |
-| `make release-audit` | Create checksum/SBOM evidence and scan the release archive. |
+| `make up` / `make down` | Render configured routes; start/stop LiteLLM, Postgres, Redis. |
+| `make observability` | Start with Prometheus and Grafana dashboards. |
+| `bin/nexgate install <project>` | Wire Claude Code + Codex to the gateway. |
+| `bin/nexgate restore` | Remove that wiring, reversibly. |
+| `make configure-demo` / `make demo` / `make demo-smoke` | Account-free loopback mock and its smoke test. |
+| `make validate` | All offline validation, sanitized environment. |
+| `make adapter-contract` | Streaming, tool-call, and error-handling adapter fixtures. |
+| `make hooks` / `make secrets` | Gitleaks hook install; tracked-content and history scan. |
+| `make release-audit` | Checksum/SBOM evidence and release-archive scan. |
 
-## Security And Scope
+## Scope and security
 
-Never commit credentials, provider responses, private endpoints, archives,
-logs, or account-linked configuration. The repository provides the portable
-runtime and integration logic, not a hosted service or a claim of compatibility
-with every provider/version without an operator-run integration check.
+NexGate never ships a provider account, endpoint, model runtime, or personal
+deployment topology. Remote providers are disabled by default; tests use local
+fake upstreams; redirects never receive credentials; provider probes are
+explicit and bounded. Operator remains responsible for each provider's
+privacy, retention, cost, and access policy.
+
+Never commit credentials, provider responses, private endpoints, or logs.
 
 Read [SECURITY.md](SECURITY.md) before reporting a vulnerability, and see the
 [portable quickstart](docs/PORTABLE-QUICKSTART.md),
-[provider and model matrix](docs/PROVIDER-MATRIX.md),
+[provider matrix](docs/PROVIDER-MATRIX.md),
 [architecture](docs/ARCHITECTURE.md),
-[Claude Code and Codex integration](docs/HARNESS-INTEGRATION.md),
+[harness integration](docs/HARNESS-INTEGRATION.md),
 [dependency policy](docs/DEPENDENCY-POLICY.md), and
-[release policy](docs/RELEASE-POLICY.md) for the operating model.
+[release policy](docs/RELEASE-POLICY.md).
 
 ## Contributing
 
