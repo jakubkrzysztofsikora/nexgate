@@ -26,7 +26,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=3).read()"]
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:4000/health/liveliness"]
       interval: 10s
       timeout: 5s
       retries: 12

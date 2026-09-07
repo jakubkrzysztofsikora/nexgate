@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Local-only pre-NexGate hook: ensure the host llama.cpp Bielik server is up
-# before the NexGate stack starts. Mirrors sovereign-agent-setup
-# config/llama-server.local.sh bielik block. Never commit secrets here.
+# Local-only pre-NexGate hook: refresh the host-managed subscription state the
+# containerised gateway cannot produce itself, then ensure the host llama.cpp
+# Bielik server is up before the NexGate stack starts. Mirrors
+# sovereign-agent-setup start-local.sh (ChatGPT auth flatten) and
+# config/llama-server.local.sh (bielik block). Never commit secrets here.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +20,52 @@ fi
 state_dir="${NEXGATE_LOCAL_STATE_DIR:-.llm-stack}"
 log_dir="${NEXGATE_LOCAL_LOG_DIR:-logs}"
 mkdir -p "$state_dir" "$log_dir"
+
+# ── ChatGPT (Codex) subscription auth ────────────────────────────
+# Codex CLI nests tokens under .tokens in ~/.codex/auth.json; LiteLLM's ChatGPT
+# provider expects a flat access_token file at CHATGPT_TOKEN_DIR/CHATGPT_AUTH_FILE.
+# Flatten into the compose-mounted runtime/state/chatgpt so subscription routes
+# authenticate without an in-container device-code login (blocked by Cloudflare).
+codex_auth="${CODEX_HOST_AUTH_FILE:-${HOME}/.codex/auth.json}"
+chatgpt_state="${NEXGATE_CHATGPT_STATE_DIR:-runtime/state/chatgpt}"
+if [[ -f "$codex_auth" ]]; then
+  mkdir -p "$chatgpt_state"
+  if python3 - "$codex_auth" "$chatgpt_state/auth.json" <<'PY'
+import base64, json, os, sys
+src, dst = sys.argv[1], sys.argv[2]
+with open(src) as f:
+    d = json.load(f)
+t = d.get("tokens", {}) if isinstance(d, dict) else {}
+at = t.get("access_token") or d.get("access_token") or ""
+exp = d.get("expires_at")
+if exp is None and at.count(".") == 2:
+    try:
+        p = at.split(".")[1]
+        p += "=" * (-len(p) % 4)
+        exp = int(json.loads(base64.urlsafe_b64decode(p).decode()).get("exp", 0))
+    except Exception:
+        exp = 0
+flat = {
+    "access_token": at,
+    "refresh_token": t.get("refresh_token") or d.get("refresh_token") or "",
+    "id_token": t.get("id_token") or d.get("id_token") or "",
+    "account_id": t.get("account_id") or d.get("account_id") or "",
+    "expires_at": exp or 0,
+}
+os.makedirs(os.path.dirname(dst), exist_ok=True)
+with open(dst, "w") as f:
+    json.dump(flat, f)
+os.chmod(dst, 0o600)
+sys.exit(0 if at else 3)
+PY
+  then
+    echo "→ ChatGPT auth flattened → $chatgpt_state/auth.json"
+  else
+    echo "warning: ChatGPT auth flatten produced no access_token; subscription routes may 401" >&2
+  fi
+else
+  echo "warning: $codex_auth missing; ChatGPT subscription routes will not authenticate" >&2
+fi
 
 bielik_server_host="${BIELIK_SERVER_HOST:-127.0.0.1}"
 bielik_server_port="${BIELIK_SERVER_PORT:-8082}"
