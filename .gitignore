@@ -10,3 +10,4 @@ __pycache__/
 reports/
 .devcontainer/.env
 runtime/state/
+.envrc
