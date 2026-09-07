@@ -290,6 +290,9 @@ _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS = _get_anthropic_primary_cooldown_seconds()
 # monotonic-clock deadline; primary token skipped for the fallback while now < deadline
 _anthropic_primary_cooldown_until: float = 0.0
 _OAUTH_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+# Guards _OAUTH_TOKEN_CACHE and the cooldown deadline: LiteLLM serves requests
+# from worker threads and async tasks, so token picks can interleave.
+_anthropic_token_state_lock = threading.Lock()
 _ANTHROPIC_EMPTY_TEXT_PLACEHOLDER = "[empty]"
 
 
@@ -534,22 +537,23 @@ def _get_source_command(source: Any) -> str:
 
 def _get_live_oauth_token(provider_name: str) -> str | None:
 	config = get_config()
-	cached_entry = _OAUTH_TOKEN_CACHE.get(provider_name)
-	now = time.time()
+	with _anthropic_token_state_lock:
+		cached_entry = _OAUTH_TOKEN_CACHE.get(provider_name)
+		now = time.time()
 
-	if provider_name == "anthropic":
-		if time.monotonic() < _anthropic_primary_cooldown_until:
-			fb = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
-			if fb:
-				# do NOT cache: cooldown must expire back to primary
-				return fb
-		env_token = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
-		if env_token:
-			_OAUTH_TOKEN_CACHE[provider_name] = (env_token, now)
-			return env_token
+		if provider_name == "anthropic":
+			if time.monotonic() < _anthropic_primary_cooldown_until:
+				fb = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+				if fb:
+					# do NOT cache: cooldown must expire back to primary
+					return fb
+			env_token = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
+			if env_token:
+				_OAUTH_TOKEN_CACHE[provider_name] = (env_token, now)
+				return env_token
 
-	if cached_entry and now - cached_entry[1] < _OAUTH_REFRESH_TTL_SECONDS:
-		return cached_entry[0]
+		if cached_entry and now - cached_entry[1] < _OAUTH_REFRESH_TTL_SECONDS:
+			return cached_entry[0]
 
 	source = config.oat_sources.get(provider_name)
 	command = _get_source_command(source)
@@ -565,7 +569,8 @@ def _get_live_oauth_token(provider_name: str) -> str | None:
 			if result.returncode == 0:
 				token = result.stdout.strip()
 				if token:
-					_OAUTH_TOKEN_CACHE[provider_name] = (token, now)
+					with _anthropic_token_state_lock:
+						_OAUTH_TOKEN_CACHE[provider_name] = (token, time.time())
 					return token
 		except Exception:
 			pass
@@ -575,26 +580,47 @@ def _get_live_oauth_token(provider_name: str) -> str | None:
 
 	token = config.get_oauth_token(provider_name)
 	if token:
-		_OAUTH_TOKEN_CACHE[provider_name] = (token, now)
+		with _anthropic_token_state_lock:
+			_OAUTH_TOKEN_CACHE[provider_name] = (token, time.time())
 	return token
 
 
+def _fallback_depth_from_metadata(metadata: Any) -> int:
+	"""Router fallback hops carry fallback_depth > 0; direct client calls do not.
+
+	Accepts either the flat metadata dict or one nesting litellm_metadata;
+	missing, boolean, negative, or non-integer values count as a direct call.
+	"""
+	if not isinstance(metadata, dict):
+		return 0
+	sources = (metadata, metadata.get("litellm_metadata"))
+	for source in sources:
+		if not isinstance(source, dict):
+			continue
+		raw = source.get("fallback_depth")
+		if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
+			return raw
+	return 0
+
+
 def _anthropic_oauth_token_for_model(
-	model_name: Any, model_group: Any = None
+	model_name: Any,
+	model_group: Any = None,
+	fallback_depth: int = 0,
 ) -> str | None:
 	"""Pick primary vs fallback OAuth token for the model group being called.
 
-	Fallback-claude-* deployments always use ANTHROPIC_FALLBACK_TOKEN so a
-	router fallback hop genuinely switches accounts; when no fallback token is
-	configured they degrade to live-token selection instead of dead headers.
-	Everything else keeps _get_live_oauth_token semantics (incl. the 429
-	cooldown fast-path, which itself returns the fallback token).
+	Fallback-claude-* deployments use ANTHROPIC_FALLBACK_TOKEN only when the
+	call is a router-internal fallback hop (fallback_depth > 0): model names
+	and groups arrive from client requests, so depth-0 calls must never steer
+	credential selection. With no fallback token configured, hops degrade to
+	live-token selection instead of dead headers. Everything else keeps
+	_get_live_oauth_token semantics (incl. the 429 cooldown fast-path).
 	"""
-	if isinstance(model_name, str) and model_name in _CLAUDE_FALLBACK_MODEL_GROUPS:
-		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
-		if fallback_token:
-			return fallback_token
-	if isinstance(model_group, str) and model_group in _CLAUDE_FALLBACK_MODEL_GROUPS:
+	if fallback_depth > 0 and (
+		(isinstance(model_name, str) and model_name in _CLAUDE_FALLBACK_MODEL_GROUPS)
+		or (isinstance(model_group, str) and model_group in _CLAUDE_FALLBACK_MODEL_GROUPS)
+	):
 		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
 		if fallback_token:
 			return fallback_token
@@ -623,16 +649,20 @@ def _maybe_arm_anthropic_cooldown(kwargs: dict, response_obj: Any) -> None:
 	# Already on the fallback token: a 429 now is the fallback account dying.
 	# Keep the deadline so primary deployments resume the primary token on
 	# expiry instead of extending the outage.
-	if time.monotonic() < _anthropic_primary_cooldown_until:
-		return
+	with _anthropic_token_state_lock:
+		if time.monotonic() < _anthropic_primary_cooldown_until:
+			return
 	status = getattr(response_obj, "status_code", None)
 	msg = _failure_message(response_obj)
 	is_429 = status == 429 or "429" in msg or "rate" in msg.lower()
 	if not is_429:
 		return
-	_anthropic_primary_cooldown_until = (
-		time.monotonic() + _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS
-	)
+	with _anthropic_token_state_lock:
+		if time.monotonic() < _anthropic_primary_cooldown_until:
+			return
+		_anthropic_primary_cooldown_until = (
+			time.monotonic() + _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS
+		)
 	_TOOL_VALIDATION_LOGGER.error(
 		"anthropic primary 429 -> failover to ANTHROPIC_FALLBACK_TOKEN for %ss (model=%s)",
 		_ANTHROPIC_PRIMARY_COOLDOWN_SECONDS, model,
@@ -5168,7 +5198,9 @@ def forward_provider_oauth(
 	request = data.get("proxy_server_request") or {}
 	headers = request.get("headers", {}) if isinstance(request, dict) else {}
 	oauth_token = _anthropic_oauth_token_for_model(
-		routed_model, metadata.get("model_group")
+		routed_model,
+		metadata.get("model_group"),
+		fallback_depth=_fallback_depth_from_metadata(metadata),
 	)
 	if not oauth_token:
 		return data
@@ -5664,7 +5696,10 @@ class _ValidatingCCProxyHandler(CCProxyHandler):
 		cleaned = _sanitize_model_call_payload(kwargs, provider_name)
 		if provider_name == "anthropic":
 			oauth_token = _anthropic_oauth_token_for_model(
-				kwargs.get("model"), metadata.get("model_group")
+				kwargs.get("model"),
+				metadata.get("model_group"),
+				fallback_depth=_fallback_depth_from_metadata(kwargs)
+				or _fallback_depth_from_metadata(metadata),
 			)
 			if oauth_token:
 				auth_header = (

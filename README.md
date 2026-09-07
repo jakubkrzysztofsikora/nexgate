@@ -103,7 +103,7 @@ error. Chains are policy: edit the template, re-render, restart.
 | Area | What it provides | Default posture |
 | --- | --- | --- |
 | LiteLLM gateway | Multi-provider model catalog, routing, fallbacks, Responses API | Localhost only |
-| Provider catalog | 66 portable aliases; only configured routes render | Opt-in per provider |
+| Provider catalog | 68 portable aliases; only configured routes render | Opt-in per provider |
 | Claude Code / Codex | Wiring overlays, model overrides, ccproxy hooks | Installed by you, reversible |
 | Token optimization | Claude-aware compression, request sanitization, tool-call recovery | In the LiteLLM runtime |
 | Observability | Prometheus + provisioned Grafana dashboard | `make observability` |
