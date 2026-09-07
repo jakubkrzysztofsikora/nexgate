@@ -24,6 +24,9 @@ compose() {
 case "${1:-}" in
   up)
     require_env_file
+    if [[ "${NEXGATE_SKIP_LOCAL_BIELIK:-0}" != "1" ]]; then
+      NEXGATE_ENV_FILE="$env_file" ./scripts/local-bielik.sh || echo "warning: local bielik unavailable; bielik routes will fail until it is up" >&2
+    fi
     NEXGATE_ENV_FILE="$env_file" uv run python scripts/render-litellm-config.py
     compose up -d --build --wait --wait-timeout 120
     port="$(sed -n 's/^NEXGATE_PORT=//p' "$env_file" | head -n 1)"

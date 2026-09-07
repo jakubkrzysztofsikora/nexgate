@@ -11,3 +11,5 @@ reports/
 .devcontainer/.env
 runtime/state/
 .envrc
+.llm-stack/
+logs/
