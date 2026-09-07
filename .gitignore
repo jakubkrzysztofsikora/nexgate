@@ -13,3 +13,5 @@ runtime/state/
 .envrc
 .llm-stack/
 logs/
+
+.claude/
