@@ -165,6 +165,32 @@ litellm.model_cost["zai/glm-5.2"] = {
 }
 logger.info("Successfully registered zai/glm-5.2 tool capability.")
 
+litellm.model_cost["zai/glm-5.3-flash"] = {
+	"mode": "chat",
+	"litellm_provider": "openai",
+	"supports_function_calling": True,
+	"supports_tool_choice": True,
+	"supports_parallel_function_calling": True,
+	"max_input_tokens": 1000000,
+	"max_output_tokens": 16384,
+	"max_tokens": 1016384,
+}
+litellm.model_cost["glm-5.3-flash"] = litellm.model_cost["zai/glm-5.3-flash"]
+logger.info("Successfully registered zai/glm-5.3-flash tool capability.")
+
+litellm.model_cost["mistral/zai-glm-5-2"] = {
+	"mode": "chat",
+	"litellm_provider": "mistral",
+	"supports_function_calling": True,
+	"supports_tool_choice": True,
+	"supports_parallel_function_calling": True,
+	"max_input_tokens": 1000000,
+	"max_output_tokens": 128000,
+	"max_tokens": 1128000,
+}
+litellm.model_cost["mistral/glm-5.2"] = litellm.model_cost["mistral/zai-glm-5-2"]
+logger.info("Successfully registered mistral/glm-5.2 tool capability.")
+
 litellm.model_cost["minimax/minimax-m3"] = {
 	"mode": "chat",
 	"litellm_provider": "minimax",
@@ -205,6 +231,8 @@ logger.info("Successfully registered zai/glm-5 tool capability.")
 for _openai_glm_alias, _openai_glm_ctx in (
 	("openai/glm-5.1", 200000),
 	("openai/glm-5.2", 1000000),
+	("openai/glm-5.3", 1000000),
+	("openai/glm-5.3-flash", 1000000),
 ):
 	if _openai_glm_alias not in litellm.model_cost:
 		litellm.model_cost[_openai_glm_alias] = {
@@ -253,6 +281,10 @@ def _patch_zai_model_info():
 			return _original_get_model_info_helper(model, custom_llm_provider, api_base, **kwargs)
 		except Exception:
 			model_lower = str(model or "").lower()
+			if "glm-5.3-flash" in model_lower or "glm_5.3_flash" in model_lower:
+				return _zai_model_info(model, context_window=1000000, max_output_tokens=16384)
+			if "glm-5.3" in model_lower or "glm_5.3" in model_lower:
+				return _zai_model_info(model, context_window=1000000, max_output_tokens=16384)
 			if "glm-5.2" in model_lower or "glm_5.2" in model_lower:
 				return _zai_model_info(model, context_window=1000000, max_output_tokens=16384)
 			if "glm-5" in model_lower or "glm_5" in model_lower or "zai" in model_lower:
@@ -348,8 +380,47 @@ logger.info(
 	_CHATGPT_PATCHES_ENABLED,
 )
 
+
+def _patch_chatgpt_item_id_rewrite():
+	# Codex writes local item IDs as "<32hex>_msg"; the ChatGPT backend rejects
+	# any ID not prefixed with "msg_". Rewrite in-flight so resumed sessions work.
+	import re
+
+	from litellm.llms.chatgpt.responses.transformation import ChatGPTResponsesAPIConfig
+
+	id_pattern = re.compile(r"^([0-9a-f]{32})_([a-z]+)(?:_\d+)?$")
+	orig_transform = ChatGPTResponsesAPIConfig.transform_responses_api_request
+
+	def _rewrite_ids(items):
+		if not isinstance(items, list):
+			return
+		for item in items:
+			if isinstance(item, dict):
+				for field in ("id", "call_id"):
+					item_id = item.get(field)
+					if isinstance(item_id, str):
+						m = id_pattern.match(item_id)
+						if m:
+							item[field] = f"{m.group(2)}_{m.group(1)}"
+
+	def _wrapped_transform(self, model, input, response_api_optional_request_params, litellm_params, headers):
+		request = orig_transform(
+			self, model, input, response_api_optional_request_params, litellm_params, headers
+		)
+		_rewrite_ids(request.get("input"))
+		return request
+
+	ChatGPTResponsesAPIConfig.transform_responses_api_request = _wrapped_transform
+	logger.info("Patched ChatGPT responses transform to rewrite Codex local item IDs.")
+
+
+try:
+	_patch_chatgpt_item_id_rewrite()
+except Exception as e:
+	logger.warning("Could not patch ChatGPT item ID rewrite: %s", e)
+
 # LiteLLM's Anthropic /v1/messages adapter strips the provider prefix (chatgpt/)
-# before calling litellm.completion/acompletion, so chatgpt/gpt-5.5 becomes gpt-5.5
+# before calling litellm.completion/acompletion, so chatgpt/gpt-5.6-terra becomes gpt-5.6-terra
 # and LiteLLM treats it as an OpenAI model. Re-prefix the model name in the
 # adapter so the responses bridge and chatgpt authenticator are triggered.
 def _patch_anthropic_messages_adapter_for_chatgpt():
@@ -509,7 +580,6 @@ def _register_chatgpt_responses_model(
 
 
 for _chatgpt_model, _chatgpt_context, _chatgpt_output_cap in (
-	("chatgpt/gpt-5.5", 1_000_000, 32768),
 	("chatgpt/gpt-5.3-codex", 131072, 16384),
 	("chatgpt/gpt-5.3-codex-spark", 131072, 16384),
 	("chatgpt/gpt-5.6-sol", 1_050_000, 128000),
@@ -1445,6 +1515,16 @@ try:
 	)
 
 	def _patched_translate_streaming_openai_response_to_anthropic(self, response, current_content_block_index):
+		if not hasattr(response, "choices") or not response.choices:
+			if getattr(response, "usage", None) is not None:
+				return {
+					"type": "message_delta",
+					"delta": {"stop_reason": None, "stop_sequence": None},
+					"usage": {
+						"output_tokens": getattr(response.usage, "completion_tokens", 0) or 0,
+					},
+				}
+			return {"type": "ping"}
 		res = _original_translate_streaming_openai_response_to_anthropic(self, response, current_content_block_index)
 		if isinstance(res, dict) and res.get("type") == "content_block_delta":
 			delta = res.get("delta") or {}
@@ -2909,9 +2989,6 @@ try:
 				else:
 					kwargs[key] = dep_dict.copy()
 
-		model_name = deployment.get("model_name") if isinstance(deployment, dict) else None
-		if model_name and model_name.startswith("chatgpt/"):
-			kwargs["disable_fallbacks"] = True
 
 		# Enforce context window limits defensively and prevent negative max_tokens
 		try:
@@ -3368,7 +3445,7 @@ try:
 		"claude-opus-5[1m]",
 		"claude-sonnet-5",
 		"claude-sonnet-5[1m]",
-		"claude-fable-5",
+		"claude-fable-5-1",
 	}
 	_ORIGINAL_ROUTE_REQUEST = None
 
@@ -3427,10 +3504,112 @@ try:
 			data["litellm_metadata"] = litellm_metadata
 		return target
 
+	def _resolve_catchall_fallback_model(data, llm_router, user_model):
+		if not isinstance(data, dict):
+			return None
+
+		raw_model = data.get("model") or user_model
+		if not raw_model:
+			proxy_request = data.get("proxy_server_request")
+			if isinstance(proxy_request, dict):
+				body = proxy_request.get("body")
+				raw_model = proxy_request.get("model") or (
+					body.get("model") if isinstance(body, dict) else None
+				)
+
+		if not raw_model or not isinstance(raw_model, str):
+			return None
+
+		# If llm_router is available, check if the requested model is already known
+		if llm_router is not None:
+			known_models = set(getattr(llm_router, "model_names", []) or [])
+			if hasattr(llm_router, "model_group_alias") and isinstance(llm_router.model_group_alias, dict):
+				known_models.update(llm_router.model_group_alias.keys())
+			if hasattr(llm_router, "deployment_names") and isinstance(llm_router.deployment_names, (list, set, dict)):
+				known_models.update(llm_router.deployment_names)
+
+			if raw_model in known_models:
+				return None
+
+		raw_model_lower = raw_model.lower()
+		target_fallback = None
+		known_set = set(getattr(llm_router, "model_names", []) or []) if llm_router else set()
+
+		# 1. If a Gemma variant was requested, prefer a registered Gemma deployment
+		if "gemma" in raw_model_lower:
+			if "gemma" in known_set:
+				target_fallback = "gemma"
+			elif "scaleway/gemma-4" in known_set:
+				target_fallback = "scaleway/gemma-4"
+			elif "or/gemma-4-26b-free" in known_set:
+				target_fallback = "or/gemma-4-26b-free"
+
+		# 2. General fallback resolution: default_fallbacks -> wildcard fallbacks -> safe default
+		if target_fallback is None and llm_router is not None:
+			default_fbs = getattr(llm_router, "default_fallbacks", None)
+			if default_fbs and isinstance(default_fbs, list):
+				for fb in default_fbs:
+					if not known_set or fb in known_set:
+						target_fallback = fb
+						break
+
+			if target_fallback is None:
+				router_fallbacks = getattr(llm_router, "fallbacks", None)
+				if isinstance(router_fallbacks, dict) and "*" in router_fallbacks and router_fallbacks["*"]:
+					target_fallback = router_fallbacks["*"][0]
+				elif isinstance(router_fallbacks, list):
+					for fb_dict in router_fallbacks:
+						if isinstance(fb_dict, dict) and "*" in fb_dict and fb_dict["*"]:
+							target_fallback = fb_dict["*"][0]
+							break
+
+		if target_fallback is None:
+			for candidate in ("or/ox-alpha-free", "minimax-m3", "scaleway/gpt-oss", "mistral", "glm-5.3"):
+				if not known_set or candidate in known_set:
+					target_fallback = candidate
+					break
+			if target_fallback is None:
+				target_fallback = "minimax-m3"
+
+		logger.warning(
+			"[CATCHALL_FALLBACK_GUARD] Unknown model '%s' requested; re-routing to fallback model '%s'",
+			raw_model,
+			target_fallback,
+		)
+
+		data["model"] = target_fallback
+
+		metadata = data.get("metadata")
+		if not isinstance(metadata, dict):
+			metadata = {}
+			data["metadata"] = metadata
+		metadata["original_requested_model"] = raw_model
+		metadata["model_group"] = target_fallback
+		metadata["ccproxy_litellm_model"] = target_fallback
+
+		litellm_metadata = data.get("litellm_metadata")
+		if isinstance(litellm_metadata, dict):
+			litellm_metadata["original_requested_model"] = raw_model
+			litellm_metadata["model_group"] = target_fallback
+			litellm_metadata["ccproxy_litellm_model"] = target_fallback
+
+		proxy_request = data.get("proxy_server_request")
+		if isinstance(proxy_request, dict):
+			proxy_request["model"] = target_fallback
+			body = proxy_request.get("body")
+			if isinstance(body, dict):
+				body["model"] = target_fallback
+
+		return target_fallback
+
 	async def _patched_route_request(data, llm_router, user_model, route_type, **kwargs):
 		target = _restore_claude_primary_route_model(data)
 		if target is not None:
 			user_model = None
+		else:
+			fb_target = _resolve_catchall_fallback_model(data, llm_router, user_model)
+			if fb_target is not None:
+				user_model = None
 		return await _ORIGINAL_ROUTE_REQUEST(
 			data=data,
 			llm_router=llm_router,

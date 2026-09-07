@@ -223,7 +223,7 @@ def test_repair_bypass_true_for_native_chatgpt() -> None:
 	assert _MOD._response_repair_should_bypass({"model": "gpt-5.6-terra"})
 	assert _MOD._response_repair_should_bypass({"model": "gpt-5.6-sol"})
 	assert _MOD._response_repair_should_bypass({"model": "gpt-5.6-luna"})
-	assert _MOD._response_repair_should_bypass({"model": "gpt-5.5"})
+	assert _MOD._response_repair_should_bypass({"model": "gpt-5.6-terra"})
 	assert _MOD._is_chatgpt_native_responses_request({"model": "gpt-5.6-terra"})
 
 

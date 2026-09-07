@@ -276,6 +276,19 @@ def _get_oauth_refresh_ttl_seconds() -> float:
 
 
 _OAUTH_REFRESH_TTL_SECONDS = _get_oauth_refresh_ttl_seconds()
+
+
+def _get_anthropic_primary_cooldown_seconds() -> float:
+	raw = os.getenv("ANTHROPIC_PRIMARY_COOLDOWN_SECONDS", "900")
+	try:
+		return max(0.0, float(raw))
+	except ValueError:
+		return 900.0
+
+
+_ANTHROPIC_PRIMARY_COOLDOWN_SECONDS = _get_anthropic_primary_cooldown_seconds()
+# monotonic-clock deadline; primary token skipped for the fallback while now < deadline
+_anthropic_primary_cooldown_until: float = 0.0
 _OAUTH_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 _ANTHROPIC_EMPTY_TEXT_PLACEHOLDER = "[empty]"
 
@@ -305,10 +318,28 @@ _CLAUDE_PRIMARY_PROVIDER_MODELS = {
 	"claude-sonnet-4-6": "anthropic/claude-sonnet-4-6",
 	"claude-sonnet-5": "anthropic/claude-sonnet-5",
 	"claude-sonnet-5[1m]": "anthropic/claude-sonnet-5",
-	"claude-fable-5": "anthropic/claude-fable-5",
+	"claude-fable-5-1": "anthropic/claude-fable-5-1",
 }
 _CLAUDE_PRIMARY_MODEL_GROUPS = set(_CLAUDE_PRIMARY_PROVIDER_MODELS)
 _CLAUDE_PRIMARY_PROVIDER_MODEL_VALUES = set(_CLAUDE_PRIMARY_PROVIDER_MODELS.values())
+# Mirror deployments in litellm.yaml.tmpl served with ANTHROPIC_FALLBACK_TOKEN.
+# Router fallback hops re-run pre-call hooks, so these model groups must NOT
+# receive the primary OAuth token a second time — that re-kills the 429'd
+# request the hop was meant to rescue.
+_CLAUDE_FALLBACK_PROVIDER_MODELS = {
+	"fallback-claude-opus-5[1m]": "anthropic/claude-opus-5",
+	"fallback-claude-opus-5": "anthropic/claude-opus-5",
+	"fallback-claude-opus-4-8[1m]": "anthropic/claude-opus-4-8",
+	"fallback-claude-opus-4-8": "anthropic/claude-opus-4-8",
+	"fallback-claude-opus-4-7[1m]": "anthropic/claude-opus-4-8",
+	"fallback-claude-opus-4-7": "anthropic/claude-opus-4-8",
+	"fallback-claude-sonnet-5[1m]": "anthropic/claude-sonnet-5",
+	"fallback-claude-sonnet-5": "anthropic/claude-sonnet-5",
+	"fallback-claude-sonnet-4-6": "anthropic/claude-sonnet-5",
+	"fallback-claude-fable-5-1": "anthropic/claude-fable-5-1",
+	"fallback-claude-haiku-4-5-20251001": "anthropic/claude-haiku-4-5-20251001",
+}
+_CLAUDE_FALLBACK_MODEL_GROUPS = set(_CLAUDE_FALLBACK_PROVIDER_MODELS)
 _CLAUDE_ONE_MILLION_CONTEXT_MODELS = {
 	"claude-opus-4-8[1m]",
 	"claude-opus-5[1m]",
@@ -332,7 +363,7 @@ _TOOL_SEARCH_MODELS = frozenset({
 	"claude-opus-4-8", "claude-opus-4-8[1m]",
 	"claude-opus-5", "claude-opus-5[1m]",
 	"claude-sonnet-5", "claude-sonnet-5[1m]",
-	"claude-fable-5",
+	"claude-fable-5-1",
 })
 # Always-loaded core tools. Discovery is a search hop, so tools called every
 # turn stay non-deferred. Kept well under the ~30-50 tool count where selection
@@ -507,6 +538,11 @@ def _get_live_oauth_token(provider_name: str) -> str | None:
 	now = time.time()
 
 	if provider_name == "anthropic":
+		if time.monotonic() < _anthropic_primary_cooldown_until:
+			fb = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+			if fb:
+				# do NOT cache: cooldown must expire back to primary
+				return fb
 		env_token = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
 		if env_token:
 			_OAUTH_TOKEN_CACHE[provider_name] = (env_token, now)
@@ -541,6 +577,66 @@ def _get_live_oauth_token(provider_name: str) -> str | None:
 	if token:
 		_OAUTH_TOKEN_CACHE[provider_name] = (token, now)
 	return token
+
+
+def _anthropic_oauth_token_for_model(
+	model_name: Any, model_group: Any = None
+) -> str | None:
+	"""Pick primary vs fallback OAuth token for the model group being called.
+
+	Fallback-claude-* deployments always use ANTHROPIC_FALLBACK_TOKEN so a
+	router fallback hop genuinely switches accounts; when no fallback token is
+	configured they degrade to live-token selection instead of dead headers.
+	Everything else keeps _get_live_oauth_token semantics (incl. the 429
+	cooldown fast-path, which itself returns the fallback token).
+	"""
+	if isinstance(model_name, str) and model_name in _CLAUDE_FALLBACK_MODEL_GROUPS:
+		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+		if fallback_token:
+			return fallback_token
+	if isinstance(model_group, str) and model_group in _CLAUDE_FALLBACK_MODEL_GROUPS:
+		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+		if fallback_token:
+			return fallback_token
+	return _get_live_oauth_token("anthropic")
+
+
+def _maybe_arm_anthropic_cooldown(kwargs: dict, response_obj: Any) -> None:
+	global _anthropic_primary_cooldown_until
+	if _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS <= 0:
+		return
+	if not os.getenv("ANTHROPIC_FALLBACK_TOKEN"):
+		return
+	model = str(kwargs.get("model") or "")
+	if "claude" not in model and "anthropic" not in model:
+		return
+	# Fallback-token deployment 429s mean the second account is also limited:
+	# arming here would pin the primary deployments onto that same dead token.
+	# Failure kwargs carry the provider-level model name (e.g. claude-opus-4-8)
+	# for BOTH deployments, so the model_group is the only discriminator. A
+	# PRIMARY claude group reached as a chain fallback (e.g. behind chatgpt/*)
+	# still uses the primary token and must keep arming.
+	metadata = kwargs.get("metadata")
+	model_group = str(metadata.get("model_group") or "") if isinstance(metadata, dict) else ""
+	if model_group in _CLAUDE_FALLBACK_MODEL_GROUPS:
+		return
+	# Already on the fallback token: a 429 now is the fallback account dying.
+	# Keep the deadline so primary deployments resume the primary token on
+	# expiry instead of extending the outage.
+	if time.monotonic() < _anthropic_primary_cooldown_until:
+		return
+	status = getattr(response_obj, "status_code", None)
+	msg = _failure_message(response_obj)
+	is_429 = status == 429 or "429" in msg or "rate" in msg.lower()
+	if not is_429:
+		return
+	_anthropic_primary_cooldown_until = (
+		time.monotonic() + _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS
+	)
+	_TOOL_VALIDATION_LOGGER.error(
+		"anthropic primary 429 -> failover to ANTHROPIC_FALLBACK_TOKEN for %ss (model=%s)",
+		_ANTHROPIC_PRIMARY_COOLDOWN_SECONDS, model,
+	)
 
 
 def _tool_search_discovered_names(block: dict[str, Any]) -> list[str]:
@@ -1589,7 +1685,7 @@ def _is_chatgpt_native_responses_request(data: dict[str, Any] | None) -> bool:
 		return False
 	provider = str(data.get("custom_llm_provider") or "").lower()
 	model = str(data.get("model") or "").lower()
-	chatgpt_models = {"gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5", "gpt-5.6"}
+	chatgpt_models = {"gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6"}
 	if provider == "chatgpt" or model.startswith("chatgpt/") or model in chatgpt_models:
 		return True
 	metadata = data.get("metadata")
@@ -5000,7 +5096,7 @@ def forward_provider_oauth(
 	provider_name = alias_map.get(routed_model)
 
 	if not provider_name:
-		if routed_model.startswith("claude-"):
+		if routed_model.startswith("claude-") or routed_model.startswith("fallback-claude-"):
 			provider_name = "anthropic"
 		elif metadata.get("ccproxy_model_config"):
 			# Fallback for ccproxy-routed requests where model might not be in alias map
@@ -5071,7 +5167,9 @@ def forward_provider_oauth(
 
 	request = data.get("proxy_server_request") or {}
 	headers = request.get("headers", {}) if isinstance(request, dict) else {}
-	oauth_token = _get_live_oauth_token(provider_name)
+	oauth_token = _anthropic_oauth_token_for_model(
+		routed_model, metadata.get("model_group")
+	)
 	if not oauth_token:
 		return data
 	auth_header = (
@@ -5495,11 +5593,6 @@ class _ValidatingCCProxyHandler(CCProxyHandler):
 			requested_model = data["model"]
 		_normalize_claude_metadata_model_group(data)
 		_force_claude_primary_passthrough(data, requested_model)
-		if _is_chatgpt_native_responses_request(data):
-			# Tool-bearing Codex/ChatGPT Responses traffic must not silently
-			# continue through a different provider's chat adapter. A fallback
-			# cannot preserve Responses call IDs and tool semantics reliably.
-			data["disable_fallbacks"] = True
 		_emit_savings_event(data, "accepted")
 
 		if official_proxy_signature:
@@ -5570,7 +5663,9 @@ class _ValidatingCCProxyHandler(CCProxyHandler):
 			_strip_tool_search_artifacts(kwargs)
 		cleaned = _sanitize_model_call_payload(kwargs, provider_name)
 		if provider_name == "anthropic":
-			oauth_token = _get_live_oauth_token(provider_name)
+			oauth_token = _anthropic_oauth_token_for_model(
+				kwargs.get("model"), metadata.get("model_group")
+			)
 			if oauth_token:
 				auth_header = (
 					oauth_token
@@ -5609,7 +5704,9 @@ class _ValidatingCCProxyHandler(CCProxyHandler):
 		start_time: Any,
 		end_time: Any,
 	) -> None:
-		if response_obj is None:
+		# LiteLLM's async failure callbacks pass the upstream exception in kwargs.
+		failure_obj = response_obj if response_obj is not None else kwargs.get("exception")
+		if failure_obj is None:
 			_emit_savings_event(kwargs, "failed_unknown")
 			_TOOL_VALIDATION_LOGGER.debug(
 				"ccproxy ignored empty failure callback: model=%s duration_ms=%s",
@@ -5625,16 +5722,20 @@ class _ValidatingCCProxyHandler(CCProxyHandler):
 			"ccproxy request failed: model_name=%s model=%s error_type=%s duration_ms=%s error=%s",
 			metadata.get("ccproxy_model_name", "unknown"),
 			kwargs.get("model", "unknown"),
-			type(response_obj).__name__,
+			type(failure_obj).__name__,
 			duration if duration is not None else "unknown",
-			_failure_message(response_obj) or "unknown",
+			_failure_message(failure_obj) or "unknown",
 		)
 		_emit_savings_event(
 			kwargs,
 			"provider_error",
 			duration_ms=duration,
-			error_type=type(response_obj).__name__,
+			error_type=type(failure_obj).__name__,
 		)
+		try:
+			_maybe_arm_anthropic_cooldown(kwargs, failure_obj)
+		except Exception:
+			_TOOL_VALIDATION_LOGGER.debug("cooldown arm failed", exc_info=True)
 
 	async def async_post_call_success_hook(
 		self,

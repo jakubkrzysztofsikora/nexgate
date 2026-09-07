@@ -294,7 +294,7 @@ def test_model_supports_tool_search_gate() -> None:
 	assert module._model_supports_tool_search("claude-opus-4-8") is True
 	assert module._model_supports_tool_search("claude-opus-4-8[1m]") is True
 	assert module._model_supports_tool_search("claude-sonnet-5") is True
-	assert module._model_supports_tool_search("claude-fable-5") is True
+	assert module._model_supports_tool_search("claude-fable-5-1") is True
 	assert module._model_supports_tool_search("qwencloud/qwen3.7-plus") is False
 	assert module._model_supports_tool_search("unsupported-model") is False
 	assert module._model_supports_tool_search(None) is False

@@ -447,7 +447,7 @@ discover_codex_models() {
   # exercise aliases that LiteLLM actually exposes; an explicit environment
   # override remains available for negative-path testing.
   if [[ -z "${LITELLM_MASTER_KEY:-}" ]]; then
-    printf '%s\n' "chatgpt/gpt-5.5"
+    printf '%s\n' "chatgpt/gpt-5.6-terra"
     return 0
   fi
 
@@ -474,7 +474,7 @@ available = {
     if isinstance(item, dict) and isinstance(item.get("id"), str)
 }
 candidates = (
-    "chatgpt/gpt-5.5",
+    "chatgpt/gpt-5.6-terra",
     "chatgpt/gpt-5.6-sol",
     "chatgpt/gpt-5.6-terra",
     "chatgpt/gpt-5.6-luna",
