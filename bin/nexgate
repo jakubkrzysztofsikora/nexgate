@@ -83,7 +83,10 @@ PRE_NEXGATE="${SETTINGS_LOCAL}.pre-nexgate"
 load_nexgate_env() {
   local env_file="${NEXGATE_ROOT}/.env"
   if [[ ! -f "$env_file" ]]; then
-    die "No .env in ${NEXGATE_ROOT} — run make configure in the NexGate repo first"
+    env_file="${NEXGATE_ROOT}/.env.nexgate"
+  fi
+  if [[ ! -f "$env_file" ]]; then
+    die "No .env or .env.nexgate in ${NEXGATE_ROOT} — run make configure in the NexGate repo first"
   fi
   while IFS='=' read -r k v; do
     case "$k" in
@@ -93,6 +96,9 @@ load_nexgate_env() {
         ;;
     esac
   done < "$env_file"
+  # The final loop iteration short-circuits the && chain when the value is
+  # pre-set in the environment; that rc=1 would kill set -e silently.
+  return 0
 }
 
 # ── Write JSON safely: write to temp, validate, then move ────────────
@@ -290,6 +296,7 @@ cmd_install() {
   printf "    ${cyan}claude --strict-mcp-config${reset}\n"
 
   wire_codex "$gateway_url" "$master_key"
+  wire_opencode "$gateway_url"
 }
 
 # ── wire Codex CLI (global ~/.codex/config.toml) ─────────────────────
@@ -385,6 +392,93 @@ EOF
   printf "  Gateway is now the default. Override per-run: ${cyan}codex -c model_provider=litellm -m glm-5.2${reset}\n"
 }
 
+# ── wire OpenCode (global opencode.json) ─────────────────────────────
+# OpenCode reads ~/.config/opencode/opencode.json (XDG-aware). A nexgate
+# provider is merged non-destructively; the previous config is backed up for
+# restore. The API key is read from the environment at launch ({env:...}),
+# sourced from the same nexgate-env.zsh the Codex wiring installs.
+wire_opencode() {
+  local gateway_url="$1"
+  local opencode_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode"
+  local opencode_config="${opencode_dir}/opencode.json"
+
+  command -v opencode >/dev/null 2>&1 || { warn "OpenCode CLI not found — skipping OpenCode wiring"; return 0; }
+
+  local models=(
+    "claude-fable-5-1"
+    "claude-opus-4-8[1m]"
+    "claude-sonnet-5"
+    "claude-haiku-4-5-20251001"
+    "chatgpt/gpt-5.6-terra"
+    "chatgpt/gpt-6-astra"
+    "glm-5.3"
+    "glm-5.3-flash"
+    "kimi-k3"
+    "minimax-m3"
+    "mistral"
+  )
+
+  mkdir -p "$opencode_dir"
+  if [[ ! -f "$opencode_config" ]]; then
+    printf '{}\n' > "$opencode_config"
+  else
+    local ts
+    ts="$(date +%Y%m%d%H%M%S)"
+    cp -p "$opencode_config" "${opencode_config}.nexgate-backup.${ts}"
+    chmod 600 "${opencode_config}.nexgate-backup.${ts}" 2>/dev/null || true
+    ls -1t "${opencode_config}.nexgate-backup."* 2>/dev/null | tail -n +4 | while IFS= read -r b; do rm -f -- "$b"; done
+  fi
+
+  local models_json
+  models_json="$(printf '%s\n' "${models[@]}" | jq -R . | jq --slurp 'reduce .[] as $m ({}; .[$m] = {name: $m})')"
+
+  jq \
+    --arg base_url "${gateway_url%/}/v1" \
+    --argjson models "$models_json" \
+    '.provider = (.provider // {})
+     | .provider.nexgate = {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "NexGate gateway",
+         "options": {
+           "baseURL": $base_url,
+           "apiKey": "{env:LITELLM_MASTER_KEY}",
+           "timeout": false,
+           "headerTimeout": false,
+           "chunkTimeout": 300000
+         },
+         "models": $models
+       }
+     | .model = "nexgate/claude-fable-5-1"' \
+    "$opencode_config" > "${opencode_config}.tmp.$$" \
+    || { rm -f "${opencode_config}.tmp.$$"; die "Failed to merge OpenCode config"; }
+  mv "${opencode_config}.tmp.$$" "$opencode_config"
+  chmod 600 "$opencode_config"
+
+  ok "Wired OpenCode → ${gateway_url%/}/v1 (provider: nexgate)"
+  printf "  ${cyan}OpenCode default:${reset} nexgate/claude-fable-5-1\n"
+  printf "  Requires LITELLM_MASTER_KEY in the environment (see %s)\n" "${HOME}/.codex/nexgate-env.zsh"
+}
+
+restore_opencode() {
+  local opencode_config="${XDG_CONFIG_HOME:-${HOME}/.config}/opencode/opencode.json"
+  [[ -f "$opencode_config" ]] || return 0
+  local latest_backup
+  latest_backup="$(ls -1t "${opencode_config}.nexgate-backup."* 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$latest_backup" ]]; then
+    cp -p "$latest_backup" "$opencode_config"
+    rm -f -- "$latest_backup"
+    ok "Restored OpenCode config from ${latest_backup##*/}"
+    return 0
+  fi
+  if jq -e '.provider.nexgate' "$opencode_config" >/dev/null 2>&1; then
+    jq 'del(.provider.nexgate) | if (.model | startswith("nexgate/")) then .model = "anthropic/claude-sonnet-4-5" else . end' \
+      "$opencode_config" > "${opencode_config}.tmp.$$" \
+      && mv "${opencode_config}.tmp.$$" "$opencode_config"
+    chmod 600 "$opencode_config"
+    ok "Removed nexgate provider from ${opencode_config}"
+  fi
+}
+
 # ── restore ──────────────────────────────────────────────────────────
 cmd_restore() {
   local restored=false
@@ -409,6 +503,8 @@ cmd_restore() {
     ok "Removed nexgate Codex env source line from ~/.zshrc"
   fi
   command -v launchctl >/dev/null 2>&1 && launchctl unsetenv LITELLM_MASTER_KEY 2>/dev/null || true
+
+  restore_opencode
 
   if [[ -f "$PRE_NEXGATE" ]]; then
     mv "$PRE_NEXGATE" "$SETTINGS_LOCAL"

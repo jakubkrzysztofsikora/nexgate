@@ -41,13 +41,13 @@ PROVIDER_GROUPS = {
     },
     "ChatGPT": {
         "models": [
-            "chatgpt/gpt-5.5",
             "chatgpt/gpt-5.6-sol",
             "chatgpt/gpt-5.6-terra",
             "chatgpt/gpt-5.6-luna",
+            "chatgpt/gpt-6-astra",
         ],
-        "log_keywords": ["chatgpt", "gpt-5.5", "gpt-5.6"],
-        "probe_model": "chatgpt/gpt-5.5",
+        "log_keywords": ["chatgpt", "gpt-5.6", "gpt-6"],
+        "probe_model": "chatgpt/gpt-5.6-terra",
     },
     "MiniMax": {
         "models": [
@@ -69,12 +69,13 @@ PROVIDER_GROUPS = {
     },
     "Z.ai GLM": {
         "models": [
-            "glm-5.1",
+            "glm-5.3",
+            "glm-5.3-flash",
             "glm-5.2",
             "qwencloud/glm-5.2",
         ],
         "log_keywords": ["glm", "zai"],
-        "probe_model": "glm-5.2",
+        "probe_model": "glm-5.3",
     },
     "QwenCloud": {
         "models": [
@@ -246,28 +247,64 @@ def parse_container_logs(stats: dict[str, dict]):
                                 pass
 
 
-def probe_single_provider(item: tuple[str, str], master_key: str) -> tuple[str, str, str]:
-    name, m = item
-    payload = {
-        "model": m,
+PROBE_URL = os.environ.get(
+    "NEXGATE_PROBE_URL",
+    f"http://127.0.0.1:{os.environ.get('LITELLM_PORT', '4000')}/v1/messages",
+)
+
+QUOTA_PATTERNS = (
+    "429",
+    "rate limit",
+    "rate_limit",
+    "ratelimit",
+    "too many requests",
+    "quota",
+    "usage limit",
+    "usage_limit",
+    "exceeded",
+    "subscription",
+    "payment required",
+)
+
+PROBE_TIMEOUT_SECONDS = 25
+
+
+def build_probe_payload(model: str) -> dict:
+    """1-token probe with fallbacks disabled: the answer must come from the
+    probed provider itself, or the error must be its true state."""
+
+    return {
+        "model": model,
         "max_tokens": 1,
+        "disable_fallbacks": True,
         "messages": [{"role": "user", "content": "hi"}],
     }
+
+
+def classify_probe_failure(status_code: int | None, body: str) -> str:
+    text = body.lower()
+    if status_code in (402, 429) or any(p in text for p in QUOTA_PATTERNS):
+        return "QUOTA EXHAUSTED"
+    return "ERROR"
+
+
+def probe_single_provider(item: tuple[str, str], master_key: str) -> tuple[str, str, str]:
+    name, m = item
     req = urllib.request.Request(
-        "http://127.0.0.1:4000/v1/messages",
-        data=json.dumps(payload).encode(),
+        PROBE_URL,
+        data=json.dumps(build_probe_payload(m)).encode(),
         headers={
             "Content-Type": "application/json",
-            "x-litellm-api-key": f"Bearer {master_key}",
+            "Authorization": f"Bearer {master_key}",
             "anthropic-version": "2023-06-01",
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=12) as r:
-            return name, "HEALTHY", "200 OK"
+        with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT_SECONDS) as r:
+            return name, "HEALTHY", "200 OK (no fallback)"
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        return name, "QUOTA EXHAUSTED", f"HTTP {e.code}: {body[:100]}"
+        body = e.read().decode(errors="replace")
+        return name, classify_probe_failure(e.code, body), f"HTTP {e.code}: {body[:100]}"
     except Exception as exc:
         return name, "ERROR", str(exc)[:100]
 
