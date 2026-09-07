@@ -357,9 +357,19 @@ EOF
     cp -p "$codex_config" "${codex_config}.nexgate-backup.${ts}"
     chmod 600 "${codex_config}.nexgate-backup.${ts}" 2>/dev/null || true
     ls -1t "${codex_config}.nexgate-backup."* 2>/dev/null | tail -n +4 | while IFS= read -r b; do rm -f -- "$b"; done
-    # Strip any prior managed block, then append the fresh one.
+    # Strip prior managed block, ANY stray [model_providers.litellm] table
+    # (older wirings appended it without markers), and leftover sovereign-era
+    # marker lines — then append the fresh block. A duplicate TOML table key
+    # makes the whole config unparseable for Codex.
     awk -v b="$managed_begin" -v e="$managed_end" '
-      $0==b {skip=1} skip && $0==e {skip=0; next} !skip
+      $0==b {inblock=1; next}
+      inblock && $0==e {inblock=0; next}
+      inblock {next}
+      /^\[model_providers\.litellm\][[:space:]]*$/ {inlitellm=1; next}
+      inlitellm && /^\[/ {inlitellm=0}
+      inlitellm {next}
+      /^# (>>>|<<<) (sovereign|nexgate) codex wiring (>>>|<<<)/ {next}
+      {print}
     ' "$codex_config" > "${codex_config}.tmp.$$"
     printf '\n%s\n' "$block" >> "${codex_config}.tmp.$$"
     mv "${codex_config}.tmp.$$" "$codex_config"

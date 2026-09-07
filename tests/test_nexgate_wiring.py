@@ -95,6 +95,25 @@ class TestCodexWiring:
         assert "nexgate" in config
         assert "http://127.0.0.1:4999/v1" in config
 
+    def test_repeated_installs_keep_codex_config_parseable(self, sandbox) -> None:
+        import tomllib
+
+        home, _repo, project = sandbox
+        pre = home / ".codex/config.toml"
+        pre.parent.mkdir(parents=True, exist_ok=True)
+        pre.write_text(
+            '[model_providers.litellm]\nname = "litellm"\nbase_url = "http://old:4000/v1"\n\n# <<< sovereign codex wiring <<<\n\n[profiles.fast]\nmodel = "gpt-4"\n'
+        )
+        run_bash_installer(project, "install")
+        result = run_bash_installer(project, "install")
+        assert result.returncode == 0, result.stderr
+        parsed = tomllib.loads(pre.read_text())
+        providers = parsed.get("model_providers", {})
+        assert list(providers.keys()).count("litellm") == 1
+        assert providers["litellm"]["base_url"] == "http://127.0.0.1:4999/v1"
+        assert parsed["profiles"]["fast"]["model"] == "gpt-4"
+        assert "sovereign codex wiring" not in pre.read_text()
+
 
 class TestOpenCodeWiring:
     def test_opencode_config_gets_nexgate_provider(self, sandbox) -> None:
