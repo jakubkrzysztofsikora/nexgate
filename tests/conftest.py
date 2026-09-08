@@ -10,9 +10,16 @@ other test files.
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import sys
 import types
+from pathlib import Path
 from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 class _Placeholder:
@@ -50,3 +57,45 @@ def install_stub(monkeypatch: Any, name: str, **attrs: Any) -> types.ModuleType:
     for attr, value in attrs.items():
         setattr(module, attr, value)
     return module
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _rendered_litellm_state() -> None:
+    """A fresh checkout has no operator `.env`, so the gitignored
+    `runtime/state/litellm.yaml` that catalog tests read doesn't exist yet.
+    Render it once from `.env.nexgate.example` with placeholders swapped for
+    dummy non-placeholder values and subscription routes force-enabled, so
+    every model is present. Never touch a real operator render if one
+    already exists.
+    """
+    output = ROOT / "runtime/state/litellm.yaml"
+    if output.exists():
+        return
+
+    fixture_env = ROOT / ".env.ci-test-fixture"
+    lines = []
+    for line in (ROOT / ".env.nexgate.example").read_text().splitlines():
+        key, sep, value = line.partition("=")
+        if sep and "replace-with-" in value:
+            value = f"ci-test-{key.lower()}"
+        elif sep and key == "NEXGATE_ENABLE_SUBSCRIPTION_ROUTES":
+            value = "true"
+        lines.append(f"{key}{sep}{value}")
+    fixture_env.write_text("\n".join(lines) + "\n")
+
+    spec = importlib.util.spec_from_file_location(
+        "render_litellm_config_for_tests", ROOT / "scripts/render-litellm-config.py"
+    )
+    render_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(render_module)
+
+    previous = os.environ.get("NEXGATE_ENV_FILE")
+    os.environ["NEXGATE_ENV_FILE"] = fixture_env.name
+    try:
+        assert render_module.main() == 0, "render-litellm-config.py failed for the test fixture env"
+    finally:
+        if previous is None:
+            os.environ.pop("NEXGATE_ENV_FILE", None)
+        else:
+            os.environ["NEXGATE_ENV_FILE"] = previous
+        fixture_env.unlink(missing_ok=True)
