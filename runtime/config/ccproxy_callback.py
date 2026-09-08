@@ -627,6 +627,25 @@ def _anthropic_oauth_token_for_model(
 	return _get_live_oauth_token("anthropic")
 
 
+# Bare 'rate' or '429' substrings match request ids and words like 'generate';
+# only explicit rate-limit phrasing may arm the account failover.
+_RATE_LIMIT_MESSAGE_MARKERS = (
+	"rate limit",
+	"rate_limit",
+	"ratelimit",
+	"too many requests",
+	"quota",
+	"overloaded",
+)
+
+
+def _is_rate_limit_response(status: Any, message: str) -> bool:
+	if status == 429:
+		return True
+	message_lower = (message or "").lower()
+	return any(marker in message_lower for marker in _RATE_LIMIT_MESSAGE_MARKERS)
+
+
 def _maybe_arm_anthropic_cooldown(kwargs: dict, response_obj: Any) -> None:
 	global _anthropic_primary_cooldown_until
 	if _ANTHROPIC_PRIMARY_COOLDOWN_SECONDS <= 0:
@@ -654,8 +673,7 @@ def _maybe_arm_anthropic_cooldown(kwargs: dict, response_obj: Any) -> None:
 			return
 	status = getattr(response_obj, "status_code", None)
 	msg = _failure_message(response_obj)
-	is_429 = status == 429 or "429" in msg or "rate" in msg.lower()
-	if not is_429:
+	if not _is_rate_limit_response(status, msg):
 		return
 	with _anthropic_token_state_lock:
 		if time.monotonic() < _anthropic_primary_cooldown_until:

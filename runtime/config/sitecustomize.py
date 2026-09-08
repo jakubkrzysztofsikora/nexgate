@@ -3505,6 +3505,16 @@ try:
 		return target
 
 	def _resolve_catchall_fallback_model(data, llm_router, user_model):
+		# Opt-in only: silently re-routing unknown model names hides 404s and
+		# bills a different model than the client asked for. Default is off;
+		# LiteLLM's normal unknown-model error surfaces instead.
+		if os.getenv("CCPROXY_CATCHALL_FALLBACK", "").strip().lower() not in {
+			"1",
+			"true",
+			"yes",
+			"on",
+		}:
+			return None
 		if not isinstance(data, dict):
 			return None
 
