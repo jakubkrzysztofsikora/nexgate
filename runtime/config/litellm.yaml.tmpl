@@ -60,6 +60,13 @@ router_settings:
     google/gemma-4-26b-it: scaleway/gemma-4
     google/gemma-4-26b-a4b-it: scaleway/gemma-4
   context_window_fallbacks:
+  - mistral/glm-5.2:
+    - glm-5.3-flash
+    - glm-5.2
+    - glm-5.3
+    - kimi-k3
+    - qwencloud/glm-5.2
+    - minimax-m3
   - bielik: []
   - psyllm-4b: []
   - glm-5.1: []
@@ -180,6 +187,17 @@ router_settings:
     - scaleway/gpt-oss
   - circit-gateway: []
   fallbacks:
+  - mistral/glm-5.2:
+    - glm-5.3-flash
+    - glm-5.2
+    - glm-5.3
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - qwencloud/glm-5.2
+    - minimax-m3
+  - or/ox-alpha-free:
+    - glm-5.3-flash
+    - minimax-m3
   - opus[1m]:
     - chatgpt/gpt-5.6-terra
     - minimax-m3
@@ -1751,6 +1769,694 @@ model_list:
     num_retries: 1
   model_info:
     context_window: 131072
+- model_name: qwencloud/kimi-k2.7-code
+  litellm_params:
+    model: openai/kimi-k2.7-code
+    api_base: os.environ/NEXGATE_QWENCLOUD_KIMI_K2_7_CODE_API_BASE
+    api_key: os.environ/QWENCLOUD_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 200000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: mistral/glm-5.2
+  litellm_params:
+    model: mistral/zai-glm-5-2
+    api_key: os.environ/MISTRAL_API_KEY
+    drop_params: true
+    additional_drop_params:
+    - output_config
+    - web_search_options
+    - max_completion_tokens
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    max_tokens: 128000
+    timeout: 60
+    num_retries: 2
+    region_name: eu
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: or/ox-alpha-free
+  litellm_params:
+    model: openai/stealth/ox-alpha
+    api_base: os.environ/NEXGATE_OR_OX_ALPHA_FREE_API_BASE
+    api_key: os.environ/OPENROUTER_API_KEY
+    drop_params: true
+    max_tokens: 131072
+    timeout: 60
+    num_retries: 3
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    disable_background_health_check: true
+- model_name: opencode/big-pickle
+  litellm_params:
+    model: openai/big-pickle
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32000
+    timeout: 60
+    num_retries: 3
+  model_info:
+    context_window: 200000
+    supports_function_calling: true
+    supports_tool_choice: true
+    disable_background_health_check: true
+    disable_fallbacks: true
+- model_name: opencode/deepseek-v4-flash
+  litellm_params:
+    model: openai/deepseek-v4-flash
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    extra_body:
+      thinking:
+        type: disabled
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/deepseek-v4-pro
+  litellm_params:
+    model: openai/deepseek-v4-pro
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    extra_body:
+      thinking:
+        type: disabled
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 128000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/glm-5.3-flash
+  litellm_params:
+    model: openai/glm-5.3-flash
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/glm-5.3
+  litellm_params:
+    model: openai/glm-5.3
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/glm-5.2
+  litellm_params:
+    model: openai/glm-5.2
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/glm-5.1
+  litellm_params:
+    model: openai/glm-5.1
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/glm-5
+  litellm_params:
+    model: openai/glm-5
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/gpt-5.6-luna
+  litellm_params:
+    model: openai/gpt-5.6-luna
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    - reasoning
+    max_tokens: 24000
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 400000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/gpt-5.6-sol
+  litellm_params:
+    model: openai/gpt-5.6-sol
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    - reasoning
+    max_tokens: 24000
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 400000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/gpt-5.6-terra
+  litellm_params:
+    model: openai/gpt-5.6-terra
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    - reasoning
+    max_tokens: 24000
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 400000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/gpt-5.6
+  litellm_params:
+    model: openai/gpt-5.6-luna
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    - reasoning
+    max_tokens: 24000
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 400000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/grok-4.5
+  litellm_params:
+    model: openai/grok-4.5
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/grok-4.6
+  litellm_params:
+    model: openai/grok-4.6
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/grok
+  litellm_params:
+    model: openai/grok-4.5
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/grok-build
+  litellm_params:
+    model: openai/grok-build-0.1
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/kimi-k3
+  litellm_params:
+    model: openai/kimi-k3
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/kimi-k2.7-code
+  litellm_params:
+    model: openai/kimi-k2.7-code
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/kimi-k2.6
+  litellm_params:
+    model: openai/kimi-k2.6
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/minimax-m3
+  litellm_params:
+    model: openai/minimax-m3
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/minimax-m2.7
+  litellm_params:
+    model: openai/minimax-m2.7
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/qwen3.8-max
+  litellm_params:
+    model: openai/qwen3.8-max
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 32000
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/qwen3.7-max
+  litellm_params:
+    model: openai/qwen3.7-max
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/qwen3.7-plus
+  litellm_params:
+    model: openai/qwen3.7-plus
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/qwen3.6-plus
+  litellm_params:
+    model: openai/qwen3.6-plus
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/mimo-v2.5
+  litellm_params:
+    model: openai/mimo-v2.5
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/mimo-v2.5-pro
+  litellm_params:
+    model: openai/mimo-v2.5-pro
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/mimo-2.5-pro
+  litellm_params:
+    model: openai/mimo-v2.5-pro
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/mimo-2.5
+  litellm_params:
+    model: openai/mimo-v2.5-pro
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: opencode/mimo
+  litellm_params:
+    model: openai/mimo-v2.5-pro
+    api_base: os.environ/NEXGATE_OPENCODE_API_BASE
+    api_key: os.environ/OPENCODE_API_KEY
+    parse_tool_call_from_content: true
+    drop_params: true
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    - parallel_tool_calls
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
 litellm_settings:
   enable_anthropic_prompt_caching: true
   anthropic_prompt_caching_ttl: 1h

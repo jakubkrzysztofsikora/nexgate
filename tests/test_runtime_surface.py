@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -12,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
-    assert len(catalog["model_list"]) == 68
+    assert len(catalog["model_list"]) == 101
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     assert all(
         not str(model["litellm_params"].get("api_base", "")).startswith(("http://", "https://"))
@@ -42,6 +43,19 @@ def test_subscription_routes_are_explicitly_disabled_in_the_example_overlay() ->
     example = (ROOT / ".env.nexgate.example").read_text()
     assert "NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=false" in example
     assert "runtime/state/chatgpt" in (ROOT / "compose.nexgate.yaml").read_text()
+
+
+def test_provider_matrix_documents_every_catalog_alias() -> None:
+    """The matrix is the operator-facing contract for what each route costs to
+    enable; a route missing from it is a route nobody knows how to turn on."""
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    documented = set(
+        re.findall(r"^\| `([^`]+)` \| ", (ROOT / "docs/PROVIDER-MATRIX.md").read_text(), re.M)
+    )
+    aliases = {model["model_name"] for model in catalog["model_list"]}
+    assert aliases == documented, (
+        f"undocumented: {sorted(aliases - documented)}; stale: {sorted(documented - aliases)}"
+    )
 
 
 def test_every_fallback_target_resolves_to_a_defined_model() -> None:
