@@ -36,6 +36,19 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("NEXGATE_ROOT", str(repo))
+
+    # The installer skips Codex/OpenCode wiring entirely when their CLI is
+    # not on PATH (bin/nexgate: `command -v codex/opencode || return 0`).
+    # Stub no-op executables so wiring is exercised on any machine, not only
+    # ones with both CLIs installed.
+    fake_bin = tmp_path / "fakebin"
+    fake_bin.mkdir()
+    for cli in ("codex", "opencode"):
+        stub = fake_bin / cli
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
+
     for leaked in (
         "LITELLM_HOST",
         "LITELLM_PORT",
