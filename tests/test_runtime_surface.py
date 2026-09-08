@@ -44,6 +44,27 @@ def test_subscription_routes_are_explicitly_disabled_in_the_example_overlay() ->
     assert "runtime/state/chatgpt" in (ROOT / "compose.nexgate.yaml").read_text()
 
 
+def test_every_fallback_target_resolves_to_a_defined_model() -> None:
+    """A fallback chain naming a model that does not exist is a dead hop: the
+    router skips it at the moment the primary is already failing."""
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    defined = {model["model_name"] for model in catalog["model_list"]}
+    router = catalog.get("router_settings", {})
+
+    targets: set[str] = set()
+    for key in ("fallbacks", "context_window_fallbacks", "content_policy_fallbacks"):
+        for entry in router.get(key) or []:
+            for chain in entry.values():
+                targets.update(chain or [])
+    targets.update(router.get("default_fallbacks") or [])
+
+    assert targets <= defined, f"undefined fallback targets: {sorted(targets - defined)}"
+    aliases = router.get("model_group_alias") or {}
+    assert set(aliases.values()) <= defined, (
+        f"undefined alias targets: {sorted(set(aliases.values()) - defined)}"
+    )
+
+
 def test_local_bielik_hook_is_inert_until_the_operator_opts_in(tmp_path: Path) -> None:
     """An operator who never set NEXGATE_BIELIK_API_BASE must not have weights
     downloaded or a llama-server started on their behalf by `make up`."""
