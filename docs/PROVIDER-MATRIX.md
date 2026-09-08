@@ -80,7 +80,6 @@ Do not add credentials to this file.
 | `or/gpt-oss-20b-free` | `NEXGATE_OR_GPT_OSS_20B_FREE_API_BASE`, `OPENROUTER_API_KEY` |
 | `qwencloud/kimi-k2.7-code` | `NEXGATE_QWENCLOUD_KIMI_K2_7_CODE_API_BASE`, `QWENCLOUD_API_KEY` |
 | `mistral/glm-5.2` | `MISTRAL_API_KEY` |
-| `or/ox-alpha-free` | `NEXGATE_OR_OX_ALPHA_FREE_API_BASE`, `OPENROUTER_API_KEY` |
 | `opencode/big-pickle` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-flash` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-pro` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |

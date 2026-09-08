@@ -342,9 +342,6 @@ router_settings:
   - circit-gateway: []
   - glm-5.1: []
   fallbacks:
-  - or/ox-alpha-free:
-    - glm-5.3-flash
-    - minimax-m3
   - opus[1m]:
     - fallback-claude-opus-4-8[1m]
     - chatgpt/gpt-5.6-terra
@@ -2153,20 +2150,6 @@ model_list:
     supports_function_calling: true
     supports_tool_choice: true
     supports_parallel_function_calling: true
-    disable_background_health_check: true
-- model_name: or/ox-alpha-free
-  litellm_params:
-    model: openai/stealth/ox-alpha
-    api_base: os.environ/NEXGATE_OR_OX_ALPHA_FREE_API_BASE
-    api_key: os.environ/OPENROUTER_API_KEY
-    drop_params: true
-    max_tokens: 131072
-    timeout: 60
-    num_retries: 3
-  model_info:
-    context_window: 1048576
-    supports_function_calling: true
-    supports_tool_choice: true
     disable_background_health_check: true
 - model_name: opencode/big-pickle
   litellm_params:

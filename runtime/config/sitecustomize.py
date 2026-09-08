@@ -3574,7 +3574,7 @@ try:
 							break
 
 		if target_fallback is None:
-			for candidate in ("or/ox-alpha-free", "minimax-m3", "scaleway/gpt-oss", "mistral", "glm-5.3"):
+			for candidate in ("minimax-m3", "scaleway/gpt-oss", "mistral", "glm-5.3"):
 				if not known_set or candidate in known_set:
 					target_fallback = candidate
 					break

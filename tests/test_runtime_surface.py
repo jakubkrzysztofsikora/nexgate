@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
-    assert len(catalog["model_list"]) == 112
+    assert len(catalog["model_list"]) == 111
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     assert all(
         not str(model["litellm_params"].get("api_base", "")).startswith(("http://", "https://"))
