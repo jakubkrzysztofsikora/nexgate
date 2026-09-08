@@ -98,6 +98,38 @@ Anthropic OAuth token first; on a quota error it walks to ChatGPT, then Kimi,
 then Qwen, then GLM — and the client just sees a slower response, not an
 error. Chains are policy: edit the template, re-render, restart.
 
+## Run a model locally (optional)
+
+Any `*_API_BASE` can point at an OpenAI-compatible server you run yourself. For
+one of them — `bielik` — NexGate also ships an optional host-side launcher,
+`scripts/local-bielik.sh`, which `make up` invokes before starting the stack.
+
+It is off until you opt in, and the opt-in is a single variable:
+
+```bash
+# .env
+NEXGATE_BIELIK_API_BASE=http://host.docker.internal:8082/v1
+```
+
+That one value does two things: it renders the `bielik` route into the catalog,
+and it tells the launcher it is allowed to run. While the value is still the
+placeholder, the route is skipped and the launcher exits immediately — it will
+never download weights you did not ask for.
+
+Once opted in, `make up` will (on the host, not in a container) fetch the GGUF
+via `hf download` if absent, then start `llama-server` in a detached `tmux`
+session and wait for its `/health`. Requires `tmux`, `llama-server`, and the
+Hugging Face CLI on the host. Tune it with the commented `BIELIK_*` block in
+`.env.nexgate.example` — repo, quantised file, port, context length, cache dir.
+
+Already supervising `llama-server` yourself via launchd or systemd? Set
+`BIELIK_LAUNCHD_MANAGED=1` and the script only health-checks the endpoint
+instead of downloading or spawning anything. To skip the hook entirely for one
+run, use `NEXGATE_SKIP_LOCAL_BIELIK=1 make up`.
+
+NexGate ships no weights, no model runtime, and no hardware assumptions — only
+the glue that points the gateway at a server you chose to run.
+
 ## What is included
 
 | Area | What it provides | Default posture |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -41,3 +42,35 @@ def test_subscription_routes_are_explicitly_disabled_in_the_example_overlay() ->
     example = (ROOT / ".env.nexgate.example").read_text()
     assert "NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=false" in example
     assert "runtime/state/chatgpt" in (ROOT / "compose.nexgate.yaml").read_text()
+
+
+def test_local_bielik_hook_is_inert_until_the_operator_opts_in(tmp_path: Path) -> None:
+    """An operator who never set NEXGATE_BIELIK_API_BASE must not have weights
+    downloaded or a llama-server started on their behalf by `make up`."""
+    fakebin = tmp_path / "bin"
+    fakebin.mkdir()
+    for tool in ("hf", "tmux", "llama-server"):
+        stub = fakebin / tool
+        stub.write_text(f'#!/usr/bin/env bash\necho "INVOKED {tool} $*"\nexit 0\n')
+        stub.chmod(0o755)
+
+    env_file = tmp_path / "env"
+    env_file.write_text("NEXGATE_BIELIK_API_BASE=https://replace-with-your-endpoint\n")
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/local-bielik.sh")],
+        env={
+            "PATH": f"{fakebin}:/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "NEXGATE_ENV_FILE": str(env_file),
+            "NEXGATE_LOCAL_STATE_DIR": str(tmp_path / "state"),
+            "NEXGATE_LOCAL_LOG_DIR": str(tmp_path / "logs"),
+            "NEXGATE_CHATGPT_STATE_DIR": str(tmp_path / "chatgpt"),
+        },
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "INVOKED" not in result.stdout
+    assert "skipping local server" in result.stdout

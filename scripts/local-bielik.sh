@@ -67,6 +67,17 @@ else
   echo "warning: $codex_auth missing; ChatGPT subscription routes will not authenticate" >&2
 fi
 
+# ── Local llama.cpp Bielik server ────────────────────────────────
+# The bielik route only renders when NEXGATE_BIELIK_API_BASE holds a real
+# endpoint (see scripts/render-litellm-config.py). Gate the host launcher on
+# that same signal so an operator who never opted in is not made to download
+# several GB of weights for a model the gateway will not even expose.
+bielik_api_base="${NEXGATE_BIELIK_API_BASE:-}"
+if [[ -z "$bielik_api_base" || "$bielik_api_base" == *replace-with-* ]]; then
+  echo "→ bielik not configured (NEXGATE_BIELIK_API_BASE unset); skipping local server"
+  exit 0
+fi
+
 bielik_server_host="${BIELIK_SERVER_HOST:-127.0.0.1}"
 bielik_server_port="${BIELIK_SERVER_PORT:-8082}"
 bielik_model_repo="${BIELIK_REPO:-${BIELIK_MODEL_REPO:-speakleash/Bielik-11B-v2.3-Instruct-GGUF}}"
