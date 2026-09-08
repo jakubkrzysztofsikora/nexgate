@@ -3,10 +3,13 @@ router_settings:
   disable_cooldowns: true
   stream_timeout: 60
   default_fallbacks:
-  - scaleway/gpt-oss
+  - kimi-k3
+  - qwencloud/qwen3.7-plus
+  - glm-5.3-flash
+  - glm-5.3
+  - mistral/glm-5.2
   - minimax-m3
   - mistral
-  - glm-5.2
   model_group_alias:
     opus[1m]: claude-opus-4-8[1m]
     gemma-2: gemma
@@ -60,151 +63,298 @@ router_settings:
     google/gemma-4-26b-it: scaleway/gemma-4
     google/gemma-4-26b-a4b-it: scaleway/gemma-4
   context_window_fallbacks:
-  - mistral/glm-5.2:
-    - glm-5.3-flash
-    - glm-5.2
-    - glm-5.3
-    - kimi-k3
-    - qwencloud/glm-5.2
-    - minimax-m3
   - bielik: []
   - psyllm-4b: []
-  - glm-5.1: []
-  - glm-5.2:
-    - qwencloud/glm-5.2
-    - scaleway/gpt-oss
+  - gemma:
     - minimax-m3
+    - scaleway/gpt-oss
+  - scaleway/gemma-4:
+    - or/gemma-4-26b-free
+    - minimax-m3
+    - scaleway/gpt-oss
   - glm-5.3:
     - glm-5.3-flash
-    - glm-5.2
-    - qwencloud/glm-5.2
-    - scaleway/gpt-oss
-    - minimax-m3
-  - glm-5.3-flash:
-    - glm-5.3
-    - glm-5.2
-    - qwencloud/glm-5.2
-    - scaleway/gpt-oss
-    - minimax-m3
-  - qwencloud/glm-5.2:
-    - scaleway/gpt-oss
-    - minimax-m3
-    - mistral
-  - kimi:
-    - scaleway/gpt-oss
-    - mistral
-    - minimax-m3
-  - mistral:
-    - scaleway/gpt-oss
-    - minimax-m3
-    - glm-5.2
-  - minimax-m3:
-    - scaleway/gpt-oss
-    - mistral
-    - glm-5.2
-  - claude-opus-4-8:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-opus-4-8[1m]:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-opus-4-7:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-opus-4-7[1m]:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-opus-5:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-opus-5[1m]:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - scaleway/gpt-oss
-    - glm-5.2
-  - claude-sonnet-5[1m]:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - claude-sonnet-5:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - claude-fable-5-1:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - chatgpt/gpt-5.6-sol
-  - opus[1m]:
-    - chatgpt/gpt-5.6-terra
-    - claude-opus-4-8[1m]
-    - minimax-m3
-    - scaleway/gpt-oss
-  - claude-haiku-4-5-20251001:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - chatgpt/gpt-5.6-sol:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - chatgpt/gpt-5.6-terra:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - deepseek-v4-pro[1m]:
-    - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
-  - qwencloud/qwen3.7-plus:
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - glm-5.2
-    - scaleway/gpt-oss
-  - qwencloud/qwen3.8-max:
-    - qwencloud-payg/qwen3.7-max-preview
-    - qwencloud-payg/qwen3.7-max-2026-06-08
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - glm-5.2
-    - scaleway/gpt-oss
-  - qwencloud/deepseek-v4-flash:
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-  - qwencloud/deepseek-v4-pro:
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-  - circit-gateway: []
-  fallbacks:
-  - mistral/glm-5.2:
-    - glm-5.3-flash
-    - glm-5.2
-    - glm-5.3
+    - mistral/glm-5.2
     - kimi-k3
     - qwencloud/qwen3.8-max
     - qwencloud/glm-5.2
     - minimax-m3
+  - glm-5.2:
+    - glm-5.3-flash
+    - glm-5.3
+    - mistral/glm-5.2
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - qwencloud/glm-5.2
+    - minimax-m3
+  - glm-5.3-flash:
+    - glm-5.3
+    - glm-5.2
+    - mistral/glm-5.2
+    - kimi-k3
+    - qwencloud/glm-5.2
+    - minimax-m3
+  - mistral/glm-5.2:
+    - glm-5.3-flash
+    - glm-5.2
+    - glm-5.3
+    - kimi-k3
+    - qwencloud/glm-5.2
+    - minimax-m3
+  - qwencloud/glm-5.2:
+    - glm-5.3-flash
+    - glm-5.3
+    - mistral/glm-5.2
+    - qwencloud/qwen3.8-max
+    - kimi-k3
+    - minimax-m3
+  - kimi:
+    - kimi-k3
+    - opencode/kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - minimax-m3
+  - kimi-k3:
+    - opencode/kimi-k3
+    - qwencloud/qwen3.8-max
+    - glm-5.3-flash
+    - mistral/glm-5.2
+    - qwencloud/kimi-k2.7-code
+    - minimax-m3
+  - mistral:
+    - mistral/glm-5.2
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - minimax-m3:
+    - kimi-k3
+    - mistral/glm-5.2
+    - mistral
+    - glm-5.3
+    - glm-5.2
+  - claude-opus-4-8:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
+    - minimax-m3
+  - claude-opus-4-8[1m]:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
+    - minimax-m3
+  - claude-opus-4-7:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
+    - minimax-m3
+  - claude-opus-4-7[1m]:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
+    - minimax-m3
+  - claude-opus-5:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - minimax-m3
+  - claude-opus-5[1m]:
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - minimax-m3
+  - claude-sonnet-5[1m]:
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-sonnet-5:
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-sonnet-4-6:
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-fable-5-1:
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - minimax-m3
+  - opus[1m]:
+    - chatgpt/gpt-5.6-terra
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - claude-haiku-4-5-20251001:
+    - chatgpt/gpt-5.6-luna
+    - kimi-k3
+    - qwencloud/qwen3.7-plus
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - qwencloud/deepseek-v4-flash
+    - minimax-m3
+  - chatgpt/gpt-5.6-sol:
+    - chatgpt/gpt-5.6-terra
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - chatgpt/gpt-5.6-terra:
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - chatgpt/gpt-5.6-luna:
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - chatgpt/gpt-6-astra:
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-6-astra:
+    - gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-5.6:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - gpt-5.6-sol:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-5.6-terra:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-5.6-luna:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - deepseek-v4-pro[1m]:
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - minimax-m3
+    - mistral
+  - qwencloud/qwen3.7-plus:
+    - qwencloud/qwen3.8-max
+    - kimi-k3
+    - mistral/glm-5.2
+    - deepseek-v4-pro[1m]
+    - glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - qwencloud/qwen3.8-max:
+    - qwencloud/qwen3.7-plus
+    - kimi-k3
+    - mistral/glm-5.2
+    - deepseek-v4-pro[1m]
+    - glm-5.2
+    - glm-5.3
+    - qwencloud-payg/qwen3.8-max
+    - minimax-m3
+  - qwencloud/deepseek-v4-flash:
+    - kimi-k3
+    - mistral/glm-5.2
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - qwencloud/deepseek-v4-pro:
+    - kimi-k3
+    - mistral/glm-5.2
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - circit-gateway: []
+  - glm-5.1: []
+  fallbacks:
   - or/ox-alpha-free:
     - glm-5.3-flash
     - minimax-m3
   - opus[1m]:
+    - fallback-claude-opus-4-8[1m]
     - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - mistral/glm-5.2
     - minimax-m3
-    - scaleway/gpt-oss
   - deepseek-v4-pro[1m]:
+    - kimi-k3
+    - mistral/glm-5.2
     - minimax-m3
-    - scaleway/gpt-oss
     - mistral
   - bielik:
     - scaleway-devstral
@@ -213,115 +363,306 @@ router_settings:
   - gemma:
     - minimax-m3
     - scaleway/gpt-oss
-  - glm-5.2:
-    - qwencloud/glm-5.2
-    - qwencloud-payg/glm-5.2
-    - qwencloud-payg/glm-5.1
+  - scaleway/gemma-4:
+    - or/gemma-4-26b-free
     - minimax-m3
     - scaleway/gpt-oss
-    - mistral
+  - or/gemma-4-26b-free:
+    - minimax-m3
+    - scaleway/gpt-oss
+  - glm-5.2:
+    - glm-5.3-flash
+    - mistral/glm-5.2
+    - glm-5.3
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - qwencloud/glm-5.2
+    - opencode/glm-5.2
+    - minimax-m3
+    - qwencloud-payg/glm-5.2
   - glm-5.3:
     - glm-5.3-flash
+    - mistral/glm-5.2
     - glm-5.2
+    - kimi-k3
+    - qwencloud/qwen3.8-max
     - qwencloud/glm-5.2
-    - qwencloud-payg/glm-5.2
+    - opencode/glm-5.3
     - minimax-m3
-    - scaleway/gpt-oss
+    - qwencloud-payg/glm-5.2
   - glm-5.3-flash:
     - glm-5.3
+    - mistral/glm-5.2
     - glm-5.2
+    - kimi-k3
+    - qwencloud/qwen3.8-max
     - qwencloud/glm-5.2
+    - minimax-m3
     - qwencloud-payg/glm-5.2
+  - mistral/glm-5.2:
+    - glm-5.3-flash
+    - glm-5.2
+    - glm-5.3
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - qwencloud/glm-5.2
     - minimax-m3
-    - scaleway/gpt-oss
   - kimi:
+    - kimi-k3
+    - opencode/kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
     - minimax-m3
-    - scaleway/gpt-oss
     - mistral
+  - kimi-k3:
+    - opencode/kimi-k3
+    - qwencloud/qwen3.8-max
+    - glm-5.3-flash
+    - mistral/glm-5.2
+    - qwencloud/kimi-k2.7-code
+    - minimax-m3
   - mistral:
+    - mistral/glm-5.2
+    - kimi-k3
+    - qwencloud/qwen3.8-max
     - minimax-m3
-    - scaleway/gpt-oss
   - minimax-m3:
+    - kimi-k3
+    - mistral/glm-5.2
     - mistral
-    - scaleway/gpt-oss
+    - opencode/minimax-m3
+    - qwencloud/qwen3.7-plus
   - claude-opus-4-8:
-    - qwencloud/qwen3.8-max
+    - fallback-claude-opus-4-8
     - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
     - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
   - claude-opus-4-8[1m]:
-    - qwencloud/qwen3.8-max
+    - fallback-claude-opus-4-8[1m]
     - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
     - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
   - claude-opus-4-7:
-    - qwencloud/qwen3.8-max
+    - fallback-claude-opus-4-7
     - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
     - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
   - claude-opus-4-7[1m]:
-    - qwencloud/qwen3.8-max
+    - fallback-claude-opus-4-7[1m]
     - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
     - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
   - claude-opus-5:
+    - fallback-claude-opus-5
     - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-  - claude-opus-5[1m]:
-    - chatgpt/gpt-5.6-terra
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-  - claude-sonnet-5[1m]:
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-    - mistral
-  - claude-sonnet-5:
-    - minimax-m3
-    - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-    - mistral
-  - claude-fable-5-1:
+    - kimi-k3
     - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
     - minimax-m3
-    - scaleway/gpt-oss
+  - claude-opus-5[1m]:
+    - fallback-claude-opus-5[1m]
+    - chatgpt/gpt-5.6-terra
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - opencode/deepseek-v4-flash
+    - minimax-m3
+  - claude-sonnet-5[1m]:
+    - fallback-claude-sonnet-5[1m]
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-sonnet-5:
+    - fallback-claude-sonnet-5
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-sonnet-4-6:
+    - fallback-claude-sonnet-4-6
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - deepseek-v4-pro[1m]
+    - minimax-m3
+  - claude-fable-5-1:
+    - fallback-claude-fable-5-1
+    - chatgpt/gpt-5.6-sol
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3-flash
+    - glm-5.3
+    - minimax-m3
   - claude-haiku-4-5-20251001:
+    - fallback-claude-haiku-4-5-20251001
+    - chatgpt/gpt-5.6-luna
+    - kimi-k3
+    - qwencloud/qwen3.7-plus
+    - mistral/glm-5.2
+    - glm-5.3-flash
     - qwencloud/deepseek-v4-flash
     - minimax-m3
-    - scaleway/gpt-oss
-    - mistral
   - qwencloud/qwen3.7-plus:
-    - minimax-m3
+    - qwencloud/qwen3.8-max
+    - opencode/qwen3.7-plus
+    - kimi-k3
+    - mistral/glm-5.2
     - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
-  - qwencloud/qwen3.8-max:
-    - qwencloud-payg/qwen3.7-max-preview
-    - qwencloud-payg/qwen3.7-max-2026-06-08
     - minimax-m3
+  - qwencloud/qwen3.8-max:
+    - qwencloud/qwen3.7-plus
+    - opencode/qwen3.8-max
+    - opencode/qwen3.7-max
+    - kimi-k3
+    - mistral/glm-5.2
     - deepseek-v4-pro[1m]
     - glm-5.2
-    - scaleway/gpt-oss
+    - glm-5.3
+    - minimax-m3
+    - qwencloud-payg/qwen3.8-max
+    - qwencloud-payg/qwen3.7-max-preview
+    - qwencloud-payg/qwen3.7-max-2026-06-08
   - qwencloud/deepseek-v4-flash:
-    - minimax-m3
+    - opencode/deepseek-v4-flash
+    - kimi-k3
+    - mistral/glm-5.2
     - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
+    - minimax-m3
   - qwencloud/deepseek-v4-pro:
-    - minimax-m3
+    - opencode/deepseek-v4-pro
+    - kimi-k3
+    - mistral/glm-5.2
     - deepseek-v4-pro[1m]
-    - scaleway/gpt-oss
+    - minimax-m3
+  - deepseek-v4-flash:
+    - opencode/deepseek-v4-flash
+    - kimi-k3
+    - mistral/glm-5.2
+    - minimax-m3
+  - deepseek-v4-pro:
+    - opencode/deepseek-v4-pro
+    - kimi-k3
+    - mistral/glm-5.2
+    - minimax-m3
+  - chatgpt/gpt-5.6-sol:
+    - chatgpt/gpt-5.6-terra
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-sol
+    - minimax-m3
   - chatgpt/gpt-5.6-terra:
-    - scaleway/gpt-oss
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-terra
+    - minimax-m3
+  - chatgpt/gpt-5.6-luna:
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-luna
+    - minimax-m3
+  - chatgpt/gpt-6-astra:
+    - chatgpt/gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-6-astra:
+    - gpt-5.6-sol
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - minimax-m3
+  - gpt-5.6:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6
+    - opencode/gpt-5.6-luna
+    - minimax-m3
+  - gpt-5.6-sol:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-sol
+    - minimax-m3
+  - gpt-5.6-terra:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-terra
+    - minimax-m3
+  - gpt-5.6-luna:
+    - claude-opus-4-8[1m]
+    - kimi-k3
+    - qwencloud/qwen3.8-max
+    - mistral/glm-5.2
+    - glm-5.3
+    - opencode/gpt-5.6-luna
     - minimax-m3
   - circit-gateway: []
   - '*':
-    - scaleway/gpt-oss
+    - kimi-k3
+    - qwencloud/qwen3.7-plus
+    - mistral/glm-5.2
     - minimax-m3
     - mistral
 model_list:
@@ -2457,6 +2798,242 @@ model_list:
     supports_tool_choice: true
     supports_parallel_function_calling: true
     disable_background_health_check: true
+- model_name: fallback-claude-opus-5[1m]
+  litellm_params:
+    model: anthropic/claude-opus-5
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_5_1M_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-opus-5
+  litellm_params:
+    model: anthropic/claude-opus-5
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_5_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-opus-4-8[1m]
+  litellm_params:
+    model: anthropic/claude-opus-4-8
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_4_8_1M_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-opus-4-8
+  litellm_params:
+    model: anthropic/claude-opus-4-8
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_4_8_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-opus-4-7[1m]
+  litellm_params:
+    model: anthropic/claude-opus-4-8
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_4_7_1M_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-opus-4-7
+  litellm_params:
+    model: anthropic/claude-opus-4-8
+    api_base: os.environ/NEXGATE_CLAUDE_OPUS_4_7_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-sonnet-5[1m]
+  litellm_params:
+    model: anthropic/claude-sonnet-5
+    api_base: os.environ/NEXGATE_CLAUDE_SONNET_5_1M_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-sonnet-5
+  litellm_params:
+    model: anthropic/claude-sonnet-5
+    api_base: os.environ/NEXGATE_CLAUDE_SONNET_5_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-sonnet-4-6
+  litellm_params:
+    model: anthropic/claude-sonnet-5
+    api_base: os.environ/NEXGATE_CLAUDE_SONNET_4_6_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    cache_control_injection_points:
+    - location: tool_config
+    - location: message
+      role: system
+    - location: message
+      index: -1
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-fable-5-1
+  litellm_params:
+    model: anthropic/claude-fable-5-1
+    api_base: os.environ/NEXGATE_CLAUDE_FABLE_5_1_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    - temperature
+    max_tokens: 32768
+    timeout: 60
+    num_retries: 2
+    extra_headers:
+      anthropic-beta: context-1m-2025-08-07
+    cache_control_injection_points: []
+  model_info:
+    context_window: 1000000
+    disable_background_health_check: true
+- model_name: fallback-claude-haiku-4-5-20251001
+  litellm_params:
+    model: anthropic/claude-haiku-4-5-20251001
+    api_base: os.environ/NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE
+    api_key: os.environ/ANTHROPIC_FALLBACK_TOKEN
+    drop_params: true
+    additional_drop_params:
+    - forward_client_headers_to_llm_api
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 2
+    cache_control_injection_points: []
+  model_info:
+    context_window: 200000
+    disable_background_health_check: true
+  rpm: 4000
+  tpm: 25000000
 litellm_settings:
   enable_anthropic_prompt_caching: true
   anthropic_prompt_caching_ttl: 1h

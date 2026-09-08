@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 from pathlib import Path
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
-    assert len(catalog["model_list"]) == 101
+    assert len(catalog["model_list"]) == 112
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     assert all(
         not str(model["litellm_params"].get("api_base", "")).startswith(("http://", "https://"))
@@ -109,3 +110,30 @@ def test_local_bielik_hook_is_inert_until_the_operator_opts_in(tmp_path: Path) -
     assert result.returncode == 0, result.stderr
     assert "INVOKED" not in result.stdout
     assert "skipping local server" in result.stdout
+
+
+def test_render_prunes_fallback_hops_for_unconfigured_models() -> None:
+    """Only model_list is filtered by configuration, so chains written for the
+    full catalog must be pruned to what this deployment actually rendered."""
+    spec = importlib.util.spec_from_file_location(
+        "render_for_prune_test", ROOT / "scripts/render-litellm-config.py"
+    )
+    render = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(render)
+
+    catalog = {
+        "router_settings": {
+            "default_fallbacks": ["kept", "dropped"],
+            "model_group_alias": {"alias": "kept"},
+            "fallbacks": [
+                {"kept": ["dropped", "kept", "alias"]},
+                {"dropped": ["kept"]},
+                {"*": ["dropped"]},
+            ],
+        }
+    }
+    render.prune_chains(catalog, {"kept"})
+    router = catalog["router_settings"]
+
+    assert router["default_fallbacks"] == ["kept"]
+    assert router["fallbacks"] == [{"kept": ["kept", "alias"]}, {"*": []}]

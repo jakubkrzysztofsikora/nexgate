@@ -111,6 +111,17 @@ Do not add credentials to this file.
 | `opencode/mimo-2.5-pro` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/mimo-2.5` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/mimo` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
+| `fallback-claude-opus-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_1M_API_BASE` |
+| `fallback-claude-opus-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_API_BASE` |
+| `fallback-claude-opus-4-8[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_8_1M_API_BASE` |
+| `fallback-claude-opus-4-8` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_8_API_BASE` |
+| `fallback-claude-opus-4-7[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_1M_API_BASE` |
+| `fallback-claude-opus-4-7` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_API_BASE` |
+| `fallback-claude-sonnet-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_1M_API_BASE` |
+| `fallback-claude-sonnet-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_API_BASE` |
+| `fallback-claude-sonnet-4-6` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_4_6_API_BASE` |
+| `fallback-claude-fable-5-1` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_FABLE_5_1_API_BASE` |
+| `fallback-claude-haiku-4-5-20251001` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE` |
 
 For a local model, point the relevant `*_API_BASE` variable at any
 OpenAI-compatible server you operate. NexGate does not prescribe a local

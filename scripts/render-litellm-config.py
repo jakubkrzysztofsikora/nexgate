@@ -63,6 +63,32 @@ def requires_subscription_opt_in(model: dict[str, Any]) -> bool:
     return not referenced_environment(model)
 
 
+def prune_chains(catalog: dict[str, Any], available: set[str]) -> None:
+    """Drop fallback hops whose model was not rendered.
+
+    Only `model_list` is filtered by configuration, so a chain written for the
+    full catalog would otherwise send a failing request to a model group this
+    deployment never defined — spending a retry to arrive at the same error.
+    """
+    router = catalog.get("router_settings") or {}
+    resolvable = available | set(router.get("model_group_alias") or {}) | {"*"}
+    for key in ("fallbacks", "context_window_fallbacks", "content_policy_fallbacks"):
+        entries = []
+        for entry in router.get(key) or []:
+            kept = {
+                source: [target for target in (chain or []) if target in resolvable]
+                for source, chain in entry.items()
+                if source in resolvable
+            }
+            entries.extend({source: chain} for source, chain in kept.items())
+        if key in router:
+            router[key] = entries
+    if "default_fallbacks" in router:
+        router["default_fallbacks"] = [
+            target for target in router["default_fallbacks"] if target in resolvable
+        ]
+
+
 def main() -> int:
     dotenv_path = ROOT / os.environ.get("NEXGATE_ENV_FILE", ".env")
     if not dotenv_path.is_file():
@@ -83,6 +109,7 @@ def main() -> int:
         else:
             skipped_models += 1
     catalog["model_list"] = selected_models
+    prune_chains(catalog, {model["model_name"] for model in selected_models})
     catalog = resolve_environment(catalog, environment)
 
     output_path = ROOT / "runtime/state/litellm.yaml"
