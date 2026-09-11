@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
+import sys
 import time
 import uuid
 
@@ -71,10 +73,26 @@ except URLError:
                                  json.dumps([path, key, body])))
 
 
+def completed_response(payload):
+    """Read native ChatGPT's SSE completion as a real Responses client does."""
+    if isinstance(payload, dict):
+        response = payload
+    else:
+        events = [json.loads(line[5:].strip()) for line in payload.splitlines()
+                  if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+        completed = [event["response"] for event in events if event.get("type") == "response.completed"]
+        assert len(completed) == 1, "native Responses stream must complete exactly once"
+        response = completed[0]
+    assert response["status"] == "completed", response
+    return response
+
+
 def start_proxy(container, image, network, mounts, db):
     docker("run", "-d", "--name", container, "--network", network, *mounts,
            "-e", f"LITELLM_MASTER_KEY={MASTER_KEY}", "-e", "PYTHONPATH=/app",
            "-e", "LITELLM_LOCAL_MODEL_COST_MAP=True",
+           "-e", "CHATGPT_API_BASE=http://agent:9000/v1",
+           "-e", "CHATGPT_TOKEN_DIR=/app", "-e", "CHATGPT_AUTH_FILE=test-chatgpt-auth.json",
            "-e", f"DATABASE_URL=postgresql://spike:disposable-spike@{db}:5432/spike",
            image, "--config=/app/config.yaml", "--host=0.0.0.0", "--port=4000")
     client = RealProxy(container)
@@ -95,30 +113,36 @@ def real_proxy(tmp_path_factory, pinned_image):
     docker("run", "--rm", "--entrypoint", "python", BASELINE_IMAGE, "-c",
            "from importlib.metadata import version; assert version('litellm') == '1.95.0'")
     name = "nexgate-a2a-spike-" + uuid.uuid4().hex[:10]
-    db, proxy, agent, baseline = name + "-db", name + "-proxy", name + "-agent", name + "-baseline"
-    config_path = tmp_path_factory.mktemp("a2a") / "config.yaml"
-    config_path.write_text(yaml.safe_dump({
-        "model_list": [
-            {"model_name": "spike-claude", "litellm_params": {
-                "model": "anthropic/claude-haiku-4-5", "api_base": "http://agent:9000",
-                "api_key": "disposable-provider-key"}},
-            {"model_name": "spike-codex", "litellm_params": {
-                "model": "openai/gpt-5.2", "api_base": "http://agent:9000/v1",
-                "api_key": "disposable-provider-key"}},
-        ],
-        "litellm_settings": {"callbacks": [
-            "claude_aware_compression.claude_aware_compression",
-            "ccproxy_callback.ccproxy_handler",
-        ]},
-        "general_settings": {
-            "master_key": "os.environ/LITELLM_MASTER_KEY",
-            "database_url": "os.environ/DATABASE_URL",
-        },
-    }))
+    db, proxy, agent, baseline, redis = (name + suffix for suffix in ("-db", "-proxy", "-agent", "-baseline", "-redis"))
+    render_root = tmp_path_factory.mktemp("a2a-rendered")
+    for source in ("scripts/render-litellm-config.py", "runtime/config/litellm.yaml.tmpl"):
+        target = render_root / source
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / source, target)
+    overlay = render_root / "synthetic.env"
+    overlay.write_text("\n".join([
+        "NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true",
+        "NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE=http://agent:9000",
+        "CLAUDE_CODE_OAUTH_TOKEN=disposable-provider-key",
+        f"LITELLM_MASTER_KEY={MASTER_KEY}",
+        f"DATABASE_URL=postgresql://spike:disposable-spike@{db}:5432/spike",
+    ]) + "\n")
+    rendered = subprocess.run(
+        [sys.executable, str(render_root / "scripts/render-litellm-config.py")],
+        env={"PATH": os.environ["PATH"], "NEXGATE_ENV_FILE": str(overlay)},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+    config_path = render_root / "runtime/state/litellm.yaml"
+    auth_path = render_root / "test-chatgpt-auth.json"
+    auth_path.write_text(json.dumps({"access_token": "disposable-chatgpt-token",
+        "account_id": "disposable-account", "expires_at": time.time() + 3600}))
     # Prisma's startup toolchain may fetch npm packages. Use a dedicated bridge
     # with no published ports; no operator services or credentials are attached.
     docker("network", "create", name)
     try:
+        docker("run", "-d", "--name", redis, "--network", name, "--network-alias", "redis",
+               "redis:7-alpine", "redis-server", "--save", "", "--appendonly", "no")
         docker("run", "-d", "--name", agent, "--network", name,
                "--network-alias", "agent", "--entrypoint", "python",
                "-v", f"{ROOT / 'tests/integration/a2a_fixture_server.py'}:/fixture.py:ro",
@@ -135,6 +159,7 @@ def real_proxy(tmp_path_factory, pinned_image):
         else:
             pytest.fail("isolated Postgres did not become ready")
         mounts = ["-v", f"{config_path}:/app/config.yaml:ro",
+                  "-v", f"{auth_path}:/app/test-chatgpt-auth.json:ro",
                   "-v", f"{ROOT / 'scripts/provision-research-agent.py'}:/provision.py:ro"]
         for filename in ("sitecustomize.py", "ccproxy_callback.py", "claude_aware_compression.py", "ccproxy.yaml"):
             mounts += ["-v", f"{ROOT / 'runtime/config' / filename}:/app/{filename}:ro"]
@@ -155,8 +180,11 @@ def real_proxy(tmp_path_factory, pinned_image):
         client.network = name
         client.mounts = mounts
         client.baseline = baseline
+        client.marker_key = marker["key"]
+        client.rendered_config = config_path
+        client.redis = redis
         yield client
     finally:
-        for container in (proxy, baseline, db, agent):
+        for container in (proxy, baseline, db, agent, redis):
             subprocess.run(["docker", "rm", "-f", "-v", container], capture_output=True)
         subprocess.run(["docker", "network", "rm", name], capture_output=True)

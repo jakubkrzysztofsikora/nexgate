@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from .conftest import RealProxy, docker
+from .conftest import RealProxy, completed_response, docker
 
 
 pytestmark = pytest.mark.skipif(
@@ -26,6 +26,7 @@ def test_real_image_installs_exact_a2a_versions(pinned_image) -> None:
 
 
 def test_rollback_preserves_database_and_existing_routes(real_proxy):
+    assert isinstance(getattr(real_proxy, "marker_key", None), str), "retain the baseline virtual key for rollback authentication"
     before = docker("exec", real_proxy.db, "psql", "-U", "spike", "-d", "spike", "-Atc",
                     'SELECT request_id FROM "LiteLLM_SpendLogs" ORDER BY request_id')
     docker("stop", real_proxy.container)
@@ -48,11 +49,17 @@ def test_rollback_preserves_database_and_existing_routes(real_proxy):
     count = docker("exec", real_proxy.db, "psql", "-U", "spike", "-d", "spike", "-Atc",
         'SELECT count(*) FROM "LiteLLM_VerificationToken" WHERE key_alias = \'migration-marker\'')
     assert count == "1", "rollback lost the pre-upgrade key"
-    status, message = old.request("/v1/messages", body={
-        "model": "spike-claude", "max_tokens": 16,
+    status, message = old.request("/v1/messages", key=real_proxy.marker_key, body={
+        "model": "claude-haiku-4-5-20251001", "max_tokens": 16,
         "messages": [{"role": "user", "content": "rollback probe"}],
     })
     assert status == 200, message
-    status, response = old.request("/v1/responses", body={"model": "spike-codex", "input": "rollback probe"})
+    status, response = old.request("/v1/responses", key=real_proxy.marker_key, body={"model": "chatgpt/gpt-5.6-terra", "input": "rollback probe"})
     assert status == 200, response
-    assert response["output"][0]["content"][0]["text"] == "spike"
+    assert completed_response(response)["output"][0]["content"][0]["text"] == "spike"
+    status, bridged = old.request("/v1/messages", key=real_proxy.marker_key, body={
+        "model": "chatgpt/gpt-5.6-terra", "max_tokens": 16,
+        "messages": [{"role": "user", "content": "rollback bridge probe"}],
+    })
+    assert status == 200, bridged
+    assert bridged["content"][0]["text"] == "spike"

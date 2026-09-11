@@ -20,6 +20,7 @@ CARD = AgentCard(
     skills=[AgentSkill(id="probe", name="probe", description="Probe", tags=["probe"])],
 )
 TASKS = {}
+CALLS = []
 
 
 def dump(model):
@@ -36,10 +37,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        self.reply(dump(CARD))
+        self.reply({"calls": CALLS} if self.path == "/_probe/calls" else dump(CARD))
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        CALLS.append({"path": self.path, "method": request.get("method"),
+                      "model": request.get("model"), "tools": request.get("tools"),
+                      "input": request.get("input"), "messages": request.get("messages")})
         if self.path.endswith("/messages"):
             message = {"id": "msg_spike", "type": "message", "role": "assistant",
                        "model": "claude-haiku-4-5", "content": [], "stop_reason": None,
@@ -77,13 +81,40 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(message)
             return
         if self.path.endswith("/responses"):
-            self.reply({"id": "resp_spike", "object": "response", "created_at": 1,
+            response = {"id": "resp_spike", "object": "response", "created_at": 1,
                         "status": "completed", "error": None, "incomplete_details": None,
                         "model": "gpt-5.2", "output": [{"id": "msg_spike", "type": "message",
                             "role": "assistant", "status": "completed", "content": [
                                 {"type": "output_text", "text": "spike", "annotations": []}]}],
                         "parallel_tool_calls": True, "tool_choice": "auto", "tools": [],
-                        "usage": {"input_tokens": 5, "output_tokens": 1, "total_tokens": 6}})
+                        "usage": {"input_tokens": 5, "output_tokens": 1, "total_tokens": 6}}
+            if request.get("stream"):
+                item = response["output"][0]
+                part = item["content"][0]
+                events = [
+                    {"type": "response.created", "response": {**response, "status": "in_progress", "output": []}},
+                    {"type": "response.output_item.added", "output_index": 0,
+                     "item": {**item, "status": "in_progress", "content": []}},
+                    {"type": "response.content_part.added", "item_id": item["id"], "output_index": 0,
+                     "content_index": 0, "part": {**part, "text": ""}},
+                    {"type": "response.output_text.delta", "item_id": item["id"], "output_index": 0,
+                     "content_index": 0, "delta": "spike"},
+                    {"type": "response.output_text.done", "item_id": item["id"], "output_index": 0,
+                     "content_index": 0, "text": "spike"},
+                    {"type": "response.content_part.done", "item_id": item["id"], "output_index": 0,
+                     "content_index": 0, "part": part},
+                    {"type": "response.output_item.done", "output_index": 0, "item": item},
+                    {"type": "response.completed", "response": response},
+                ]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for number, event in enumerate(events):
+                    event["sequence_number"] = number
+                    self.wfile.write(("event: " + event["type"] + "\ndata: " + json.dumps(event) + "\n\n").encode())
+                self.wfile.flush()
+            else:
+                self.reply(response)
             return
         response = {"jsonrpc": "2.0", "id": request["id"]}
         if request["method"] == "message/send":

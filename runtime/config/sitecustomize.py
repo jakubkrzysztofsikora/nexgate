@@ -441,10 +441,11 @@ def _patch_anthropic_messages_adapter_for_chatgpt():
 	# responses adapter keeps the request closer to the backend.
 	orig_should_route = anthropic_handler._should_route_to_responses_api
 
-	def _should_route(provider):
-		if _CHATGPT_PATCHES_ENABLED and provider == "chatgpt":
+	def _should_route(custom_llm_provider, *args, **kwargs):
+		if _CHATGPT_PATCHES_ENABLED and custom_llm_provider == "chatgpt":
 			return True
-		return orig_should_route(provider)
+		# 1.100 adds requested/resolved model context; 1.95 passes only provider.
+		return orig_should_route(custom_llm_provider, *args, **kwargs)
 
 	anthropic_handler._should_route_to_responses_api = _should_route
 
@@ -3796,4 +3797,3 @@ try:
 	logger.info("Successfully patched ChatGPTToolCallNormalizer._normalize to preserve stream arguments.")
 except Exception as e:
 	logger.error(f"Failed to patch ChatGPTToolCallNormalizer: {e}", exc_info=True)
-

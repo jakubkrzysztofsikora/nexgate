@@ -20,6 +20,8 @@ clamping, provider capability adaptation, and Codex Responses API bridging.
 
 The candidate image pins LiteLLM `1.100.1` and `a2a-sdk==1.1.2`, retaining
 FastAPI `0.139.0`, CCProxy `1.2.0`, and all three mounted compatibility modules.
+The ChatGPT-to-Anthropic routing wrapper forwards LiteLLM's optional model
+context arguments, supporting both the 1.95 and 1.100 calling conventions.
 Agent registration uses `scripts/provision-research-agent.py` and the current
 `/a2a/{agent-id-or-name}/.well-known/agent-card.json` discovery endpoint.
 Registration alone does not grant a caller an agent-scoped key.
@@ -29,6 +31,15 @@ database, and a controlled HTTP agent using the installed SDK's `compat.v0_3`
 models. It does not require operator credentials. The SDK's top-level types
 are protobuf v1 types; LiteLLM's JSON-RPC implementation uses the compatibility
 types for Message, DataPart, Task, artifacts, and errors.
+
+The runtime configuration is produced by the unchanged template and renderer
+copied into a disposable directory, using only a synthetic overlay. Redis,
+cache settings, logging settings, and callback registration are retained.
+Native `chatgpt/*` Responses and the Anthropic-to-Responses bridge use a local
+API-base override and expiring synthetic test credentials; no OAuth login or
+operator authentication files are used. Negative JSON-RPC cases verify both
+the rejection response and absence of upstream requests. Rollback reuses the
+virtual key created by the baseline image for actual model requests.
 
 Build the pre-upgrade baseline from the recorded source, then the candidate:
 
