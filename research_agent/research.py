@@ -47,13 +47,14 @@ async def research_cluster(request, policy, search, model, evidence_store):
             raise PolicyViolation('seed evidence exceeds source budget')
         if not set(request.authority_evidence_ids) <= records.keys():
             raise PolicyViolation('missing trusted authority seed records')
-        seen = {str(row.url) for row in records.values()}
+        seen = {str(url) for row in records.values() for url in (row.url, row.final_url)}
         queries_used = 0
         for iteration in range(1, policy.max_iterations + 1):
             plan = await model.plan_queries(request, tuple(records.values()), policy)
             plan = QueryPlan.model_validate(plan.model_dump() if isinstance(plan, QueryPlan) else plan)
             queries = list(plan.model_dump().values())[:policy.max_queries_per_iteration]
-            hits = await search.search(queries, policy)
+            hits = await search.search(queries, policy, remaining_sources=policy.max_sources - len(records),
+                                       excluded_urls=frozenset(seen))
             queries_used += len(queries)
             if len(hits) > policy.max_sources:
                 raise PolicyViolation('search result budget exceeded')

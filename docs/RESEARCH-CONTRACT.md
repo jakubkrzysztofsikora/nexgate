@@ -172,6 +172,34 @@ reject extra fields, truncated/tool/refusal outputs fail closed, and untrusted
 request/page text stays in a separate data message. The manifest counts host
 observed calls and queries rather than accepting model-owned bookkeeping.
 
+Search adapters accept `search(queries, policy, *, remaining_sources,
+excluded_urls)`. Orchestration supplies capacity after seeds and previous
+captures, plus their original and final URLs. Tavily collects bounded results
+for all categories before selecting distinct URLs round-robin. When four slots
+and four categories with new distinct candidates remain, every category reaches
+capture before any category gets a second slot. Existing captured URLs consume
+no new slots; less than four remaining slots cannot cover all categories.
+
+For deterministic host re-extraction, the record's existing `extractor_version`
+field now selects the entire algorithm: `plain-utf8-v1` decodes UTF-8 with
+replacement and preserves text exactly; `html-text-v1` decodes the same way,
+uses `TextExtractor`/`HTMLParser(convert_charrefs=True)`, omits script/style/template
+data, strips each nonempty data segment, and joins segments with newline.
+HTML and XHTML share those semantics. `extract_text(archived_bytes, version)`
+replays either path without needing the original HTTP MIME. Unknown versions
+fail closed. SHA-256 is over UTF-8 extracted text; the exact passage is its first
+16,000 characters. The version is persisted in the evidence record and included
+in producer identity derivation, even if two algorithms happen to return the
+same text. Task 6 must dispatch by this version and bind it during verification;
+it must not infer the algorithm from the URL or assume all archives are HTML.
+
+Model calls carry `policy.reviewed_claim_id` and `policy.reviewed_claim_text` in
+a separate host-reviewed system context. Request hypotheses and fetched pages
+remain untrusted user data. Synthesis is instructed to preserve the reviewed
+claim even when the hypothesis differs; the host validation gate still enforces
+equality. Both trusted context and untrusted data count toward the model input
+byte ceiling.
+
 Run `python3 -m pytest -q tests/research_agent tests/integration/test_research_adapters.py`.
 Default tests use deterministic transports and loopback API servers without real
 credentials. `RESEARCH_LIVE_TESTS=1` explicitly enables the one-query Tavily

@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import json
 
 import httpx
 import pytest
@@ -8,6 +9,8 @@ import pytest
 from research_agent.sources import SourcePolicyViolation, SourceClient, fetch_source
 from research_agent.capture import EvidenceStore, CaptureError, S3Backend
 from research_agent.research import research_cluster, QueryPlan
+from research_agent.model_litellm import LiteLLMModel
+from research_agent.search_tavily import TavilySearch
 from test_policy import setup_case, change
 
 
@@ -137,6 +140,72 @@ def test_s3_backend_reads_back_bytes_and_closes_stream():
     run(scenario())
 
 
+@pytest.mark.parametrize('seed_hit', [False, True])
+def test_categories_reach_capture_with_seed_capacity(monkeypatch, seed_hit):
+    async def scenario():
+        request, draft, records, policy, _ = setup_case()
+        store = EvidenceStore(MemoryBackend())
+        archive = await store.put_content_addressed(b'seed')
+        seed = change(records['src:1'], archive_ref=archive, content_sha256=archive.rsplit('/', 1)[1])
+        # Twelve trusted records leave four slots: one for each query category.
+        store.seed_records = (seed, *(change(seed, evidence_id=f'src:seed{i}', url=f'https://seed.example/{i}') for i in range(11)))
+        async def api(url, payload, key, policy):
+            hits = [{'url': f'https://public.example/{payload["query"]}/{i}'} for i in range(16)]
+            if seed_hit:
+                hits[0] = {'url': str(seed.url)}
+            return {'results': hits}
+        monkeypatch.setattr('research_agent.search_tavily.post_json', api)
+        captured = []
+        def page(request):
+            captured.append(request.url.path.split('/')[1])
+            return httpx.Response(200, headers={'content-type': 'text/plain'}, content=request.url.path.encode())
+        class Model:
+            alias = 'fake'
+            async def plan_queries(self, *args):
+                return QueryPlan(primary='primary', contrary='contrary', correction='correction', ownership='ownership')
+            async def synthesize(self, *args):
+                return draft
+        result = await research_cluster(request, policy, TavilySearch(api_key='fake', client=client_for(page)), Model(), store)
+        assert captured == ['primary', 'contrary', 'correction', 'ownership']
+        assert len(result.evidence_records) == 16
+    run(scenario())
+
+
+def test_plain_and_html_archives_have_reproducible_extractor_semantics():
+    from research_agent.capture import host_record_from_capture
+    from research_agent import sources
+    _, _, _, policy, _ = setup_case()
+    content = b'<p>Visible</p><script>hidden</script>'
+    captures = [run(fetch_source('https://public.example/', policy, client_for(
+        lambda request, mime=mime: httpx.Response(200, headers={'content-type': mime}, content=content))))
+        for mime in ('text/plain', 'text/html')]
+    records = [host_record_from_capture(row, 'editorial-research/sha256/' + row.content_sha256) for row in captures]
+    assert records[0].extractor_version != records[1].extractor_version
+    assert captures[0].extracted_text == '<p>Visible</p><script>hidden</script>'
+    assert captures[1].extracted_text == 'Visible'
+    for capture, record in zip(captures, records):
+        restored = sources.extract_text(content, record.extractor_version)
+        assert restored == capture.extracted_text
+        assert hashlib.sha256(restored.encode()).hexdigest() == record.extracted_text_sha256
+        assert restored[:16000] == record.exact_passage
+
+
+def test_synthesis_gets_host_reviewed_claim_when_hypothesis_differs(monkeypatch):
+    request, draft, records, policy, _ = setup_case()
+    request = change(request, claim_hypothesis='The number is 999.')
+    async def api(url, payload, key, bounds):
+        system = [row['content'] for row in payload['messages'] if row['role'] == 'system']
+        trusted = next((json.loads(row) for row in system if row.startswith('{')), {})
+        claim = trusted.get('host_reviewed_context', {}).get('reviewed_claim_text')
+        assert claim == policy.reviewed_claim_text
+        result = change(draft, claim_text=claim)
+        return {'choices': [{'finish_reason': 'stop', 'message': {'content': result.model_dump_json()}}]}
+    monkeypatch.setattr('research_agent.model_litellm.post_json', api)
+    result = run(LiteLLMModel(api_key='fake').synthesize(request, tuple(records.values()), 1, policy))
+    from research_agent.policy import validate_draft
+    validate_draft(result, request, records, policy)
+
+
 def test_host_run_and_retry_budget_and_final_archive_verification():
     async def scenario():
         request, draft, records, policy, _ = setup_case()
@@ -148,7 +217,7 @@ def test_host_run_and_retry_budget_and_final_archive_verification():
         class Search:
             name = 'fake-search'
             client = client_for(lambda req: httpx.Response(200, headers={'content-type': 'text/plain'}, content=b'new evidence'))
-            async def search(self, queries, policy):
+            async def search(self, queries, policy, **kwargs):
                 return ['https://public.example/', 'https://public.example/']
         class Model:
             alias = 'fake-model'

@@ -69,7 +69,8 @@ class EvidenceStore:
 
 def host_record_from_capture(envelope, archive_ref):
     host = urlsplit(envelope.final_url).hostname
-    identity = hashlib.sha256((envelope.final_url + '\n' + envelope.content_sha256 + '\n' + envelope.extracted_text_sha256).encode()).hexdigest()
+    identity = hashlib.sha256((envelope.final_url + '\n' + envelope.content_sha256 + '\n'
+                              + envelope.extracted_text_sha256 + '\n' + envelope.extractor_version).encode()).hexdigest()
     return ResearchEvidenceRecord(evidence_id='src:' + identity, url=envelope.url,
         final_url=envelope.final_url, redirect_chain=list(envelope.redirect_chain), title=host,
         publisher=host, author=None, published_at=None, updated_at=None,

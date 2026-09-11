@@ -29,7 +29,7 @@ class CaptureEnvelope:
     extracted_text_sha256: str
     exact_passage: str
     retrieved_at: datetime
-    extractor_version: str = 'html-text-v1'
+    extractor_version: str
 
 
 class TextExtractor(HTMLParser):
@@ -49,6 +49,18 @@ class TextExtractor(HTMLParser):
     def handle_data(self, data):
         if not self.hidden and data.strip():
             self.parts.append(data.strip())
+
+
+def extract_text(content, extractor_version):
+    """Replay extraction from archived bytes and the record's bound version only."""
+    text = content.decode('utf-8', errors='replace')
+    if extractor_version == 'plain-utf8-v1':
+        return text
+    if extractor_version == 'html-text-v1':
+        parser = TextExtractor()
+        parser.feed(text)
+        return '\n'.join(parser.parts)
+    raise SourcePolicyViolation('unsupported extractor version')
 
 
 def public_address(value):
@@ -141,16 +153,13 @@ class SourceClient:
                             raise SourcePolicyViolation('source byte ceiling exceeded')
                         chunks.append(chunk)
                     content = b''.join(chunks)
-                    text = content.decode('utf-8', errors='replace')
-                    if mime != 'text/plain':
-                        parser = TextExtractor()
-                        parser.feed(text)
-                        text = '\n'.join(parser.parts)
+                    extractor_version = 'plain-utf8-v1' if mime == 'text/plain' else 'html-text-v1'
+                    text = extract_text(content, extractor_version)
                     if not text.strip():
                         raise SourcePolicyViolation('empty source text')
                     return CaptureEnvelope(original, url, tuple(redirects), tuple(pins), content,
                         hashlib.sha256(content).hexdigest(), text, hashlib.sha256(text.encode()).hexdigest(),
-                        text[:16000], datetime.now(timezone.utc))
+                        text[:16000], datetime.now(timezone.utc), extractor_version)
         raise SourcePolicyViolation('source capture failed')
 
 
