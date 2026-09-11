@@ -218,3 +218,14 @@ class ProductPolicy(StrictModel):
     minimum_outlets: Annotated[int, Field(strict=True, ge=3, le=1_000_000_000)] = 3
     minimum_authors: Annotated[int, Field(strict=True, ge=5, le=1_000_000_000)] = 5
     minimum_support_ratio: Ratio = 0.0
+    max_iterations: Annotated[int, Field(strict=True, ge=1, le=5)] = 3
+    max_queries_per_iteration: Annotated[int, Field(strict=True, ge=4, le=8)] = 4
+    max_sources: Annotated[int, Field(strict=True, ge=1, le=64)] = 16
+    max_source_bytes: Annotated[int, Field(strict=True, ge=1, le=4_000_000)] = 1_000_000
+    max_redirects: Annotated[int, Field(strict=True, ge=0, le=8)] = 4
+    connect_timeout_seconds: Annotated[int, Field(strict=True, ge=1, le=30)] = 5
+    read_timeout_seconds: Annotated[int, Field(strict=True, ge=1, le=60)] = 10
+    source_timeout_seconds: Annotated[int, Field(strict=True, ge=1, le=120)] = 30
+    run_timeout_seconds: Annotated[int, Field(strict=True, ge=1, le=900)] = 300
+    max_model_tokens: Annotated[int, Field(strict=True, ge=1, le=16000)] = 4000
+    max_model_input_bytes: Annotated[int, Field(strict=True, ge=1, le=2_000_000)] = 262144

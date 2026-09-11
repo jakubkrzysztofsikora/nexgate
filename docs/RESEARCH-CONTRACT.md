@@ -37,9 +37,9 @@ For each cited evidence ID, the host supplies an `EvidenceAuthority`:
 - `complete_member_coverage`, `signed_publication_sequence`, and
   `reviewed_incident`: provenance for the respective non-adverse evidence lanes.
 
-Only the trusted caller can establish these facts. The library does not fetch
-archives, inspect signatures, determine retention eligibility, or infer source
-reliability. Lustro must persist those checks and recompute attestations under
+Only the trusted caller can establish these facts. The research producer verifies
+archive bytes; it does not inspect signatures, determine retention eligibility,
+or infer source reliability. Lustro must persist those checks and recompute attestations under
 its publication transaction. An arbitrary source-class label is insufficient.
 Evidence records use `editorial-research/sha256/<content_sha256>` archive keys.
 
@@ -116,3 +116,65 @@ pytest. `./scripts/validate.sh` includes the contract tests in offline validatio
 The pinned runtime image already supplies Pydantic; no runtime/config change
 is required for this contract. Task 4's report records the read-only pytest
 mounts used to exercise that unchanged image without installing packages.
+
+## Bounded capture and research adapters
+
+`await research_cluster(request, policy, search, model, evidence_store)` returns
+a `ResearchRun` containing the strict draft, host-built evidence records, and a
+host-built usage manifest. It does not approve or publish the draft. Supply
+`TavilySearch()` and `LiteLLMModel()` explicitly to use real services. Search uses
+`TAVILY_API_KEY`; the model uses `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and
+`RESEARCH_MODEL_ALIAS` (default `gpt-5.6-sol`). No routing configuration changes.
+The existing LiteLLM runtime supplies HTTPX and Pydantic v2; local tests need
+those packages alongside pytest. Network calls transmit the request and captured
+passages to the configured model, and planned queries to Tavily.
+
+The trusted caller supplies `EvidenceStore(backend, seed_records=...)`. Seeds
+include every request authority ID and all representative records that may be
+cited. They are host inputs, never model output. The asynchronous backend
+implements `put(key, bytes)` and `get(key, byte_limit) -> bytes`;
+`S3Backend(configured_s3_client, private_bucket)` adapts an existing boto-style
+private S3-compatible client. The caller configures SDK deadlines and retries.
+The library does not create buckets or discover credentials. Uploads use
+`editorial-research/sha256/<digest>` and read-after-write SHA-256 verification;
+all returned archives, including seeds, are verified again after synthesis.
+Deleted, missing, corrupt, or unwritable archives fail the run.
+
+Capture connects only to an explicitly validated global address. DNS results are
+validated together, the selected address is pinned in the HTTPX URL, and the
+original hostname is used for Host and verified TLS SNI. Connection reuse is
+disabled to prevent cross-host TLS reuse when redirect hosts share an IP.
+Every redirect is revalidated and re-resolved. The P0 implementation is more
+restrictive than the allowed-port ceiling: HTTPS/443 only, no downgrade to
+HTTP/80. It also accepts identity encoding only, so compressed and decoded byte
+ceilings coincide. HTML, XHTML, and plain text are accepted; scripts, styles,
+and templates are excluded from extracted HTML text. No page commands execute.
+`trust_env=False` prevents environment proxies for source and service clients.
+Service URLs are trusted host configuration and are separate from source URLs.
+
+`CaptureEnvelope` retains raw bytes, text, both hashes, exact passage, retrieval
+time, redirect chain, and pinned addresses. New records get producer-local
+`src:<sha256>` IDs derived from final URL and content/text hashes. They are
+`commentary` in one shared `unreviewed:all` independence group, without author
+or publication-date claims. Lustro must recompute its canonical evidence IDs,
+re-extract and verify the passage, classify sources, review independence and
+relations, and remap citations before signing. Capture verification grants no
+editorial authority. Seed records preserve their existing host IDs.
+
+Host policy defaults: three iterations, four queries per iteration (primary,
+contrary, named-subject/correction, ownership/syndication), sixteen total sources
+including seeds, one million source bytes, four redirects, five-second connect,
+ten-second read, thirty-second source/API and 300-second run deadlines, 4,000
+output tokens per model call, and 256 KiB model data input. Existing canonical
+request/result bounds also apply; the result bound covers the complete run.
+Each iteration permits one plan call and one synthesis call. Structured schemas
+reject extra fields, truncated/tool/refusal outputs fail closed, and untrusted
+request/page text stays in a separate data message. The manifest counts host
+observed calls and queries rather than accepting model-owned bookkeeping.
+
+Run `python3 -m pytest -q tests/research_agent tests/integration/test_research_adapters.py`.
+Default tests use deterministic transports and loopback API servers without real
+credentials. `RESEARCH_LIVE_TESTS=1` explicitly enables the one-query Tavily
+credentials/quota probe; it is never enabled by default or by validation scripts.
+Live provider quota, model quality, and real private S3 availability are deployment
+checks, not assertions established by the deterministic suite.
