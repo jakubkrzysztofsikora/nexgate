@@ -240,4 +240,14 @@ def validate_approved_assertions(
                 raise PolicyViolation("missing evidence binding decision")
             if evidence_id not in authorities:
                 raise PolicyViolation("missing host source authority")
-        _enforce_lane_authority(request, matching, evidence_records, authorities)
+        if assertion.assertion_class in {"truth_status", "verdict_explanation"}:
+            _enforce_lane_authority(request, matching, evidence_records, authorities)
+    claim_identity = next(row for row in assertions.values() if row.assertion_class == "claim_identity")
+    accepted_members = {row.evidence_id for row in bindings
+                        if row.assertion_id == claim_identity.assertion_id
+                        and row.reviewer_decision == "accepted" and row.relation == "supports"}
+    for evidence_id in draft.claim_member_evidence_ids:
+        if evidence_id not in authorities:
+            raise PolicyViolation("missing claim-member host source authority")
+        if evidence_id not in accepted_members:
+            raise PolicyViolation("claim-member citation requires accepted claim_identity supports binding")

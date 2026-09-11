@@ -62,14 +62,34 @@ orphan, uncited, or unknown bindings fail. Each assertion needs an accepted
 identity, not against the literal status word `false`. Rejected and
 `context_only` decisions cannot satisfy the required relation.
 
-The lane authority rule runs for each assertion's qualifying bindings and
-uses only IDs in the request's reviewed authority set. A false verdict requires
+Every `claim_member_evidence_ids` entry additionally needs a verified, current
+host attestation and an accepted `supports` binding on the `claim_identity`
+assertion. A quote shown in a representative excerpt cannot bypass this check
+by binding claim identity only to a separate fact-check record.
+
+The lane authority rule runs for `truth_status` and `verdict_explanation`
+assertions' qualifying bindings and uses only IDs in the request's reviewed
+authority set. Descriptive assertions (claim identity, member coverage, shared
+narrative, publication sequence, verified context, and limitations) require
+verified accepted support; their sources need not establish the verdict.
+This clarifies the brief's over-broad per-assertion pseudocode in favor of the
+design's distinction between descriptive support and adverse verdict authority.
+Human review must reject an adverse verdict disguised as a descriptive class.
+
+A false verdict requires
 a qualifying ClaimReview or authoritative primary/official evidence plus
 reliable corroboration in a distinct independence group. Misleading requires
 the latter combination. Interested sources do not establish adverse verdicts.
 Propagation requires complete coverage and signed sequence authority; incidents
 require preserved reviewed artifacts. Stale, unverified, changed, and
 conflicting source attestations fail closed.
+
+For a false claim, `truth_status` requires the accepted contradiction of the
+reviewed claim. `verdict_explanation` needs accepted support for its explanatory
+prose plus the lane's authority; it does not require a contradiction of the
+explanation itself. The draft always retains its separately validated status
+assertion. Misleading status and its explanation require accepted support and
+authoritative context plus independent corroboration for the same proposition.
 
 The lexical P0 guard conservatively blocks common English/Polish coordination,
 intent, funding, beneficiary, ownership, criminality, state-sponsorship, and

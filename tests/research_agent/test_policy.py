@@ -269,3 +269,106 @@ def test_exact_quote_and_request_correlation_cannot_be_forged():
         validate_draft(change(draft, representation_type="exact_quote"), request, records, policy)
     with pytest.raises(PolicyViolation, match="request_id"):
         validate_draft(change(draft, request_id=request.cluster_id), request, records, policy)
+
+
+def separate_sources_case(lane="claim_refuted"):
+    request, draft, records, policy, bindings = setup_case(lane)
+    member = change(records["src:1"], evidence_id="member:1", source_class="commentary",
+                    independence_group="member:publisher", exact_passage=draft.claim_text)
+    chronology = change(records["src:1"], evidence_id="sequence:1", source_class="primary",
+                        independence_group="sequence:publisher",
+                        exact_passage="Ten eligible members; the first publication was yesterday.")
+    records.update({member.evidence_id: member, chronology.evidence_id: chronology})
+    policy = change(policy, evidence_authorities=[*policy.evidence_authorities, *[
+        change(policy.evidence_authorities[0], evidence_id=row.evidence_id,
+               record_sha256=digest(row), authoritative=False, reliable=False,
+               qualifying_claimreview=False, interested_party=True,
+               complete_member_coverage=False, signed_publication_sequence=False,
+               reviewed_incident=False) for row in (member, chronology)
+    ]])
+    request = change(request, representatives=[change(request.representatives[0],
+        evidence_id=member.evidence_id, excerpt=draft.claim_text)])
+    source_for = {"claim_identity": "member:1", "shared_narrative": "member:1",
+                  "publication_sequence": "sequence:1", "limitations": "sequence:1",
+                  "verified_context": "sequence:1"}
+    draft = change(draft, representation_type="exact_quote", claim_member_evidence_ids=["member:1"],
+                   assertions=[change(row, evidence_ids=[source_for.get(row.assertion_class, "src:1")])
+                               for row in draft.assertions])
+    bindings = [change(row, evidence_id=source_for.get(row.assertion_id, "src:1")) for row in bindings]
+    if lane == "claim_misleading":
+        primary = change(records["src:1"], source_class="primary")
+        independent = change(primary, evidence_id="corroboration:1",
+                             source_class="independent_reporting", independence_group="independent:publisher")
+        records.update({primary.evidence_id: primary, independent.evidence_id: independent})
+        primary_authority = change(policy.evidence_authorities[0], record_sha256=digest(primary),
+                                   qualifying_claimreview=False)
+        policy = change(policy, evidence_authorities=[primary_authority, *policy.evidence_authorities[1:],
+            change(primary_authority, evidence_id=independent.evidence_id,
+                   record_sha256=digest(independent), authoritative=False)])
+        request = change(request, authority_evidence_ids=["src:1", independent.evidence_id])
+        draft = change(draft, assertions=[change(row, evidence_ids=["src:1", independent.evidence_id])
+            if row.assertion_class in {"truth_status", "verdict_explanation"} else row for row in draft.assertions])
+        bindings += [change(row, evidence_id=independent.evidence_id) for row in bindings
+                     if row.assertion_id in {"truth_status", "verdict_explanation"}]
+    return request, draft, records, policy, bindings
+
+
+@pytest.mark.parametrize("lane", ["claim_refuted", "claim_misleading", "propagation_only", "hostile_incident"])
+def test_descriptive_sources_do_not_need_verdict_authority(lane):
+    request, draft, records, policy, bindings = separate_sources_case(lane)
+    validate_approved_assertions(draft, bindings, request, records, policy)
+
+
+@pytest.mark.parametrize("authority_state", ["absent", "stale"])
+def test_exact_quote_cannot_cite_member_without_current_host_authority(authority_state):
+    request, draft, records, policy, bindings = setup_case()
+    member = change(records["src:1"], evidence_id="member:unbound", exact_passage=draft.claim_text)
+    records[member.evidence_id] = member
+    request = change(request, representatives=[change(request.representatives[0],
+        evidence_id=member.evidence_id, excerpt=draft.claim_text)])
+    draft = change(draft, representation_type="exact_quote", claim_member_evidence_ids=[member.evidence_id])
+    if authority_state == "stale":
+        policy = change(policy, evidence_authorities=[*policy.evidence_authorities,
+            change(policy.evidence_authorities[0], evidence_id=member.evidence_id,
+                   record_sha256=digest(member), current=False)])
+    with pytest.raises(PolicyViolation, match="authority"):
+        validate_approved_assertions(draft, bindings, request, records, policy)
+
+
+@pytest.mark.parametrize("relation,decision", [("context_only", "accepted"), ("supports", "rejected")])
+def test_each_member_citation_needs_accepted_claim_identity_support(relation, decision):
+    request, draft, records, policy, bindings = setup_case()
+    member = change(records["src:1"], evidence_id="member:extra")
+    records[member.evidence_id] = member
+    policy = change(policy, evidence_authorities=[*policy.evidence_authorities,
+        change(policy.evidence_authorities[0], evidence_id=member.evidence_id, record_sha256=digest(member))])
+    request = change(request, representatives=[*request.representatives,
+        change(request.representatives[0], evidence_id=member.evidence_id)])
+    draft = change(draft, claim_member_evidence_ids=["src:1", member.evidence_id], assertions=[
+        change(row, evidence_ids=["src:1", member.evidence_id]) if row.assertion_class == "claim_identity" else row
+        for row in draft.assertions])
+    bindings.append(change(bindings[0], evidence_id=member.evidence_id, relation=relation, reviewer_decision=decision))
+    with pytest.raises(PolicyViolation, match="claim.member.*binding"):
+        validate_approved_assertions(draft, bindings, request, records, policy)
+
+
+def test_verified_member_cannot_be_unbound_to_claim_identity():
+    request, draft, records, policy, bindings = setup_case()
+    member = change(records["src:1"], evidence_id="member:unbound")
+    records[member.evidence_id] = member
+    policy = change(policy, evidence_authorities=[*policy.evidence_authorities,
+        change(policy.evidence_authorities[0], evidence_id=member.evidence_id, record_sha256=digest(member))])
+    request = change(request, representatives=[change(request.representatives[0], evidence_id=member.evidence_id)])
+    draft = change(draft, claim_member_evidence_ids=[member.evidence_id])
+    with pytest.raises(PolicyViolation, match="claim.member.*binding"):
+        validate_approved_assertions(draft, bindings, request, records, policy)
+
+
+@pytest.mark.parametrize("assertion_class", ["truth_status", "verdict_explanation"])
+def test_verdict_cannot_use_only_descriptive_source_authority(assertion_class):
+    request, draft, records, policy, bindings = separate_sources_case()
+    draft = change(draft, assertions=[change(row, evidence_ids=["sequence:1"])
+        if row.assertion_class == assertion_class else row for row in draft.assertions])
+    bindings = [change(row, evidence_id="sequence:1") if row.assertion_id == assertion_class else row for row in bindings]
+    with pytest.raises(PolicyViolation, match="lane authority"):
+        validate_approved_assertions(draft, bindings, request, records, policy)
