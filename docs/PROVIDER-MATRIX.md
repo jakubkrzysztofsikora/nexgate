@@ -8,6 +8,12 @@ NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true switch. This prevents a new stack from
 starting an OAuth device flow before the operator has deliberately configured it.
 Do not add credentials to this file.
 
+The `quick-research` A2A spike is an agent registry entry, not a model catalog
+alias. It is not enabled by the example overlay. Its candidate runtime is
+LiteLLM `1.100.1` with `a2a-sdk==1.1.2`; see the architecture compatibility gate
+before enabling it. The integration upstream provides deterministic responses
+and proves gateway transport, not a live research provider's answer quality.
+
 | Alias | Required environment variables |
 | --- | --- |
 | `qwencloud/qwen3.8-max` | `NEXGATE_QWENCLOUD_QWEN3_8_MAX_API_BASE`, `QWENCLOUD_API_KEY` |

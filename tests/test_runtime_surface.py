@@ -11,6 +11,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_litellm_image_pins_a2a_capable_versions() -> None:
+    dockerfile = (ROOT / "runtime/Dockerfile.litellm").read_text()
+    assert "ARG LITELLM_VERSION=1.100.1" in dockerfile
+    assert '"a2a-sdk==1.1.2"' in dockerfile
+
+
+def test_litellm_image_keeps_existing_compatibility_modules() -> None:
+    compose = (ROOT / "compose.nexgate.yaml").read_text()
+    for name in ("sitecustomize.py", "ccproxy_callback.py", "claude_aware_compression.py"):
+        assert name in compose
+
+
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)

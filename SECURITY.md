@@ -24,3 +24,17 @@ Treat any credential committed to the repository as compromised. Do not test,
 validate, or paste suspected credentials into issues, logs, CI output, or pull
 requests. Report only the opaque path, commit, and scanner rule to the private
 channel.
+
+## A2A Caller Scope
+
+Agent registration and caller authorization are separate operations. The
+provisioning script reads the admin credential from `LITELLM_MASTER_KEY` and
+prints only the new agent ID. It does not enable public access or issue keys.
+Give application callers explicit agent grants in their key/team object
+permissions; do not treat a model allowlist or an empty agent list as an agent
+deny rule. LiteLLM's unscoped keys can access registered agents.
+
+Run the opt-in A2A compatibility gate with disposable test credentials before
+deployment. It checks authentication and rejection of a key scoped to a
+different agent against a real proxy. The test containers do not mount the
+operator overlay or publish ports, and the database is disposable.

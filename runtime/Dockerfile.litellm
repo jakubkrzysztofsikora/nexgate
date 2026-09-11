@@ -21,13 +21,13 @@ RUN pip install --no-cache-dir uv
 # 4. Unified Installation: Install LiteLLM with proxy extras, CCProxy, and Prisma in one go.
 # is paired with the mounted /app/sitecustomize.py compatibility patches
 # for Claude Code /v1/messages streaming tool deltas.
-ARG LITELLM_VERSION=1.95.0
+ARG LITELLM_VERSION=1.100.1
 # fastapi is pinned LAST in its own step: fastapi>=0.141 removed the private
 # get_flat_dependant that litellm's 1.95 proxy (management_v1) still imports,
 # and litellm's own pin (>=0.136.3,<1.0) is too loose to exclude it. A single
 # combined install lets the resolver keep 0.141; a trailing exact pin forces
 # the downgrade (verified: prisma + get_flat_dependant both still resolve).
-RUN uv pip install --system "litellm[proxy]==${LITELLM_VERSION}" "claude-ccproxy==1.2.0" prisma opentelemetry-api opentelemetry-sdk tenacity \
+RUN uv pip install --system "litellm[proxy]==${LITELLM_VERSION}" "a2a-sdk==1.1.2" "claude-ccproxy==1.2.0" prisma opentelemetry-api opentelemetry-sdk tenacity \
     && uv pip install --system "fastapi==0.139.0"
 
 # 5. Workaround for LiteLLM callback import bug:
