@@ -5,8 +5,9 @@ from research_agent.a2a_service import (
     DurableA2AService,
     LustroResearchSubmission,
     create_app,
+    validate_runtime_configuration,
 )
-from research_agent.a2a_store import SQLAlchemyA2ATaskStore
+from research_agent.a2a_store import SQLAlchemyA2ATaskStore, SubmissionConflict, metadata
 from research_agent.research import ResearchRun, RunManifest
 import pytest
 from fastapi.testclient import TestClient
@@ -44,7 +45,8 @@ async def make_service(tmp_path):
     store = SQLAlchemyA2ATaskStore.from_url(
         f"sqlite+aiosqlite:///{tmp_path / 'tasks.sqlite3'}"
     )
-    await store.create_schema()
+    async with store.engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
     enqueued = []
 
     async def enqueue(task_id):
@@ -108,6 +110,91 @@ def test_acknowledgement_loss_resend_returns_the_reserved_task(tmp_path):
         recovered = await service.submit(envelope.request.request_id, envelope)
         assert recovered == accepted
         assert enqueued == [accepted.id]
+        await store.dispose()
+
+    run(scenario())
+
+
+def test_duplicate_message_id_with_different_commitment_is_rejected(tmp_path):
+    async def scenario():
+        store, service, enqueued = await make_service(tmp_path)
+        envelope, _ = submission()
+        accepted = await service.submit(envelope.request.request_id, envelope)
+        changed = envelope.model_copy(
+            update={
+                "request": envelope.request.model_copy(
+                    update={"claim_hypothesis": "A different hypothesis."}
+                )
+            }
+        )
+        with pytest.raises(SubmissionConflict):
+            await service.submit(envelope.request.request_id, changed)
+        assert enqueued == [accepted.id]
+        await store.dispose()
+
+    run(scenario())
+
+
+def test_active_working_lease_cannot_be_claimed_by_another_instance(tmp_path):
+    async def scenario():
+        store, first, _ = await make_service(tmp_path)
+        second = DurableA2AService(store, enqueue=lambda _task_id: asyncio.sleep(0))
+        envelope, result = submission()
+        task = await first.submit(envelope.request.request_id, envelope)
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def research(*_args):
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+            return result
+
+        first_run = asyncio.create_task(first.execute(task.id, research))
+        await started.wait()
+        observed = await second.execute(task.id, research)
+        assert observed.state == "working"
+        assert calls == 1
+        release.set()
+        assert (await first_run).state == "completed"
+        assert await store.run_count(task.id) == 1
+        await store.dispose()
+
+    run(scenario())
+
+
+def test_expired_working_run_fails_closed_instead_of_rerunning(tmp_path):
+    async def scenario():
+        store, service, _ = await make_service(tmp_path)
+        envelope, _ = submission()
+        task = await service.submit(envelope.request.request_id, envelope)
+        run_id = await store.claim(task.id, "crashed-worker", lease_seconds=0)
+        assert run_id is not None
+        recovered = await service.recover_pending()
+        assert recovered == 0
+        failed = await service.get(task.id)
+        assert failed.state == "failed"
+        assert failed.error == "research worker lease expired; manual reconciliation required"
+        assert await store.run_count(task.id) == 1
+        await store.dispose()
+
+    run(scenario())
+
+
+def test_stale_owner_cannot_persist_an_artifact(tmp_path):
+    async def scenario():
+        store, service, _ = await make_service(tmp_path)
+        envelope, result = submission()
+        task = await service.submit(envelope.request.request_id, envelope)
+        run_id = await store.claim(task.id, "active-owner", lease_seconds=60)
+        stale = await store.complete(
+            task.id, "stale-owner", run_id, result.model_dump(mode="json")
+        )
+        assert stale.state == "working"
+        assert stale.artifact is None
+        await store.cancel(task.id)
         await store.dispose()
 
     run(scenario())
@@ -178,6 +265,36 @@ def test_completed_and_failed_tasks_are_terminal(tmp_path):
     run(scenario())
 
 
+def test_cancel_signals_and_awaits_local_execution_without_artifact(tmp_path):
+    async def scenario():
+        store, service, _ = await make_service(tmp_path)
+        envelope, result = submission()
+        task = await service.submit(envelope.request.request_id, envelope)
+        started = asyncio.Event()
+        stopped = asyncio.Event()
+
+        async def research(*_args):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+            return result
+
+        execution = asyncio.create_task(service.execute(task.id, research))
+        await started.wait()
+        canceled = await service.cancel(task.id)
+        assert canceled.state == "canceled"
+        assert stopped.is_set()
+        assert (await execution).state == "canceled"
+        persisted = await service.get(task.id)
+        assert persisted.state == "canceled"
+        assert persisted.artifacts == []
+        await store.dispose()
+
+    run(scenario())
+
+
 def test_private_jsonrpc_requires_bearer_and_strict_lustro_data_part(tmp_path):
     async def scenario():
         store, service, enqueued = await make_service(tmp_path)
@@ -207,6 +324,33 @@ def test_private_jsonrpc_requires_bearer_and_strict_lustro_data_part(tmp_path):
             task = response.json()["result"]
             assert task["status"]["state"] == "submitted"
             assert [str(task_id) for task_id in enqueued] == [task["id"]]
+
+            card = client.get(
+                "/.well-known/agent-card.json",
+                headers={"Authorization": "Bearer lustro-test-token"},
+            ).json()
+            assert card["protocolVersion"] == "1.0"
+            assert card["securitySchemes"] == {
+                "lustroBearer": {"type": "http", "scheme": "bearer"}
+            }
+            assert card["security"] == [{"lustroBearer": []}]
+            from a2a.compat.v0_3.types import AgentCard
+
+            assert AgentCard.model_validate(card).protocol_version == "1.0"
+
+            conflict_request = envelope.model_dump(mode="json")
+            conflict_request["request"]["claim_hypothesis"] = "Changed after reservation."
+            conflict = request | {"id": "conflict-1"}
+            conflict["params"] = {
+                "message": request["params"]["message"]
+                | {"parts": [{"kind": "data", "data": conflict_request}]}
+            }
+            conflict_response = client.post(
+                "/",
+                headers={"Authorization": "Bearer lustro-test-token"},
+                json=conflict,
+            ).json()
+            assert conflict_response["error"]["code"] == -32009
 
             malformed = request | {"id": "bad-1"}
             malformed["params"] = {
@@ -248,3 +392,19 @@ def test_private_jsonrpc_requires_bearer_and_strict_lustro_data_part(tmp_path):
         await store.dispose()
 
     run(scenario())
+
+
+def test_runtime_configuration_fails_closed_before_startup():
+    valid = {
+        "A2A_DATABASE_URL": "postgresql+asyncpg://service:secret@db/nexgate",
+        "LUSTRO_A2A_BEARER_TOKEN": "dedicated-inbound-token",
+        "RESEARCH_ARCHIVE_BUCKET": "private-research",
+        "RESEARCH_ARCHIVE_ENDPOINT_URL": "https://s3.internal.example",
+        "LITELLM_API_KEY": "dedicated-model-key",
+        "TAVILY_API_KEY": "dedicated-search-key",
+    }
+    validate_runtime_configuration(valid)
+    for key in valid:
+        broken = valid | {key: "replace-with-placeholder"}
+        with pytest.raises(RuntimeError, match=key):
+            validate_runtime_configuration(broken)

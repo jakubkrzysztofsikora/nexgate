@@ -5,7 +5,12 @@ The private durable transport wraps this contract in
 The envelope is accepted only with Lustro's dedicated bearer credential and is
 stored for worker recovery, but never returned through task reads. Its A2A
 `messageId` is the sole remote idempotency key and must equal
-`request.request_id`; duplicate sends return the originally reserved task.
+`request.request_id`; exact duplicate sends return the originally reserved task,
+while reuse with a different canonical submission commitment fails as a
+conflict. Author identifiers and comment/social URLs may be present inside this
+dedicated authenticated internal evidence envelope. Raw comment text remains
+forbidden by the strict models, and the stored envelope is never returned from
+task endpoints or public output.
 
 `research_agent.models` defines the version-one request, draft, assertion,
 coverage, representative, comment-aggregate, evidence-record, and binding wire

@@ -143,7 +143,7 @@ run, use `NEXGATE_SKIP_LOCAL_BIELIK=1 make up`.
 | `make configure` | Create an ignored operator `.env` with generated local credentials. |
 | `make up` / `make down` | Render configured routes; start/stop LiteLLM, Postgres, Redis. |
 | `make observability` | Start with Prometheus and Grafana dashboards. |
-| `docker compose --profile research up -d research-agent` | Start the private research service after its dedicated token, model key, and archive are configured. |
+| `docker compose --profile research up -d research-agent` | Start the private research service after applying its documented migration and configuring dedicated token, model/search keys, and archive. |
 | `bin/nexgate install <project>` | Wire Claude Code + Codex to the gateway. |
 | `bin/nexgate restore` | Remove that wiring, reversibly. |
 | `make configure-demo` / `make demo` / `make demo-smoke` | Account-free loopback mock and its smoke test. |

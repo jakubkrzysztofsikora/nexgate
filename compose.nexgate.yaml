@@ -67,6 +67,7 @@ services:
       LITELLM_API_KEY: ${RESEARCH_LITELLM_API_KEY}
       RESEARCH_ARCHIVE_BUCKET: ${RESEARCH_ARCHIVE_BUCKET}
       RESEARCH_ARCHIVE_ENDPOINT_URL: ${RESEARCH_ARCHIVE_ENDPOINT_URL:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
     depends_on:
       db:
         condition: service_healthy

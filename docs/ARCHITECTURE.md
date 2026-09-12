@@ -74,16 +74,29 @@ Before any research work is queued, PostgreSQL inserts a task row with a unique
 that row and do not queue another run. `tasks/get` returns durable state;
 `tasks/cancel` changes only submitted or working tasks. Completed tasks expose
 one `ResearchRun` artifact and never echo the trusted submission envelope.
-Submitted and interrupted working tasks are recovered when the service starts,
-while a conditional state transition ensures only one worker claims a task.
+Submitted tasks are recovered when the service starts. Working tasks carry a
+persisted run ID, lease owner, and heartbeat deadline; another instance cannot
+claim an active lease. Because a provider or archive side effect may already
+have occurred, an expired working lease fails closed for manual reconciliation
+instead of rerunning research. Owner/run fencing prevents a stale worker from
+persisting an artifact. Cancellation updates durable state, signals and awaits
+the local execution when owned by the receiving instance, and conditional
+completion prevents artifacts after cancellation.
 
 The profile is intentionally disabled by default. Configure a dedicated
 LiteLLM virtual key, private S3-compatible archive bucket, and dedicated inbound
 Lustro token before starting it:
 
 ```bash
+docker compose exec -T db psql -v ON_ERROR_STOP=1 -U nexgate -d nexgate \
+  < runtime/migrations/001_research_a2a_tasks.sql
 docker compose --profile research up -d research-agent
 ```
+
+Startup runs a schema preflight only; it never creates or mutates tables. The
+migration is additive and safe to reapply. Startup also rejects missing or
+placeholder database, inbound bearer, Tavily, dedicated LiteLLM virtual-key,
+archive bucket, or HTTPS archive-endpoint configuration before a worker starts.
 
 Starting the container is not authorization to enable Lustro publication or to
 run paid research. Cross-repository container, custody, migration, and disabled

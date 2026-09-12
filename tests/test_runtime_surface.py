@@ -52,9 +52,12 @@ def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
     assert not service.get("ports")
     assert service["environment"]["A2A_DATABASE_URL"].startswith("postgresql+asyncpg://")
     assert service["environment"]["LUSTRO_A2A_BEARER_TOKEN"]
+    assert service["environment"]["TAVILY_API_KEY"]
     dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()
     assert "uv sync --frozen --no-dev" in dockerfile
     assert "research_agent.a2a_service:app_from_env" in dockerfile
+    assert "a2a-sdk==1.1.2" in (ROOT / "pyproject.toml").read_text()
+    assert (ROOT / "runtime/migrations/001_research_a2a_tasks.sql").exists()
 
 
 def test_harness_wiring_uses_portable_defaults() -> None:
