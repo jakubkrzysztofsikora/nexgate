@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, inspect, select, update
+from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, func, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -51,6 +51,10 @@ class TaskNotFound(LookupError):
 
 class SubmissionConflict(ValueError):
     """The idempotency key is already bound to different trusted inputs."""
+
+
+class LeaseLost(RuntimeError):
+    """The owner can no longer mutate a run after its durable lease expires."""
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -154,6 +158,7 @@ class SQLAlchemyA2ATaskStore:
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                    tasks.c.lease_expires_at > func.now(),
                 ).values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
             )
         return result.rowcount == 1
@@ -168,22 +173,79 @@ class SQLAlchemyA2ATaskStore:
 
     async def _terminal_update(self, task_id: UUID, owner: str, run_id: UUID, state: str, *, artifact=None, error=None) -> None:
         async with self.engine.begin() as connection:
-            await connection.execute(
+            result = await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                    tasks.c.lease_expires_at > func.now(),
                 ).values(state=state, artifact=artifact, error=error, lease_owner=None,
                          lease_expires_at=None, updated_at=datetime.now(UTC))
             )
+        if result.rowcount != 1:
+            raise LeaseLost("research run lease is no longer valid")
 
     async def cancel(self, task_id: UUID) -> StoredTask:
         async with self.engine.begin() as connection:
             await connection.execute(
-                update(tasks).where(tasks.c.id == str(task_id), tasks.c.state.in_(("submitted", "working"))).values(
+                update(tasks).where(tasks.c.id == str(task_id), tasks.c.state == "submitted").values(
                     state="canceled", artifact=None, lease_owner=None, lease_expires_at=None,
                     updated_at=datetime.now(UTC))
             )
+            await connection.execute(
+                update(tasks).where(tasks.c.id == str(task_id), tasks.c.state == "working").values(
+                    state="canceled", artifact=None, updated_at=datetime.now(UTC))
+            )
         return await self.get(task_id)
+
+    async def acknowledge_cancellation(
+        self, task_id: UUID, owner: str, run_id: UUID
+    ) -> StoredTask:
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(tasks).where(
+                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
+                    tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                ).values(
+                    lease_owner=None, lease_expires_at=None, updated_at=datetime.now(UTC)
+                )
+            )
+        return await self.get(task_id)
+
+    async def run_active(self, task_id: UUID, owner: str, run_id: UUID) -> bool:
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(tasks).where(
+                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
+                    tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                ).values(
+                    lease_owner=None, lease_expires_at=None, updated_at=func.now()
+                )
+            )
+            active = await connection.scalar(
+                select(tasks.c.id).where(
+                    tasks.c.id == str(task_id), tasks.c.state == "working",
+                    tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                    tasks.c.lease_expires_at > func.now(),
+                )
+            )
+        return active is not None
+
+    async def cancellation_acknowledged(self, task_id: UUID) -> bool:
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(tasks).where(
+                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
+                    tasks.c.lease_owner.is_not(None),
+                    tasks.c.lease_expires_at.is_not(None),
+                    tasks.c.lease_expires_at <= func.now(),
+                ).values(
+                    lease_owner=None, lease_expires_at=None, updated_at=func.now()
+                )
+            )
+            owner = await connection.scalar(
+                select(tasks.c.lease_owner).where(tasks.c.id == str(task_id))
+            )
+        return owner is None
 
     async def recoverable(self) -> list[UUID]:
         now = datetime.now(UTC)

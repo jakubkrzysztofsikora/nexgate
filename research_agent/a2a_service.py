@@ -11,11 +11,14 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from google.protobuf.json_format import ParseDict, ParseError
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from .a2a_store import SQLAlchemyA2ATaskStore, StoredTask, SubmissionConflict, TaskNotFound
+from a2a.types import a2a_pb2
+
+from .a2a_store import LeaseLost, SQLAlchemyA2ATaskStore, StoredTask, SubmissionConflict, TaskNotFound
 from .models import ClusterResearchDraftRequest, ProductPolicy, ResearchEvidenceRecord, StrictModel
 from .policy import canonical_bytes, validate_request
 from .research import ResearchRun, research_cluster
@@ -65,10 +68,26 @@ class TaskSnapshot(StrictModel):
 
 
 ResearchExecutor = Callable[
-    [ClusterResearchDraftRequest, ProductPolicy, tuple[ResearchEvidenceRecord, ...]],
+    [
+        ClusterResearchDraftRequest,
+        ProductPolicy,
+        tuple[ResearchEvidenceRecord, ...],
+        Callable[[], Awaitable[None]],
+    ],
     Awaitable[ResearchRun],
 ]
 Enqueue = Callable[[UUID], Awaitable[None]]
+
+
+def _restore_json_integers(value: Any) -> Any:
+    """Recover JSON integers coerced to doubles by protobuf Value."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_restore_json_integers(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_json_integers(item) for key, item in value.items()}
+    return value
 
 
 def _snapshot(task: StoredTask) -> TaskSnapshot:
@@ -108,10 +127,16 @@ class DurableA2AService:
 
     async def cancel(self, task_id: UUID) -> TaskSnapshot:
         task = await self.store.cancel(task_id)
+        if task.state != "canceled" or task.lease_owner is None:
+            return _snapshot(task)
         execution = self._executions.get(task_id)
         if execution is not None and execution is not asyncio.current_task() and not execution.done():
             execution.cancel()
             await asyncio.gather(execution, return_exceptions=True)
+            task = await self.store.get(task_id)
+        else:
+            while not await self.store.cancellation_acknowledged(task_id):
+                await asyncio.sleep(0.01)
             task = await self.store.get(task_id)
         return _snapshot(task)
 
@@ -129,6 +154,11 @@ class DurableA2AService:
         if execution is not None:
             self._executions[task_id] = execution
         heartbeat = asyncio.create_task(self._heartbeat(task_id, run_id))
+
+        async def checkpoint() -> None:
+            if not await self.store.run_active(task_id, self.owner_id, run_id):
+                raise asyncio.CancelledError
+
         try:
             submission = LustroResearchSubmission.model_validate(
                 await self.store.submission(task_id)
@@ -137,15 +167,36 @@ class DurableA2AService:
                 submission.request,
                 submission.policy,
                 tuple(submission.seed_records),
+                checkpoint,
             )
             result = ResearchRun.model_validate(
                 result.model_dump() if isinstance(result, ResearchRun) else result
             )
             task = await self.store.complete(task_id, self.owner_id, run_id, result.model_dump(mode="json"))
+        except LeaseLost:
+            task = await self.store.get(task_id)
         except asyncio.CancelledError:
-            task = await self.store.cancel(task_id)
+            task = await self.store.get(task_id)
+            if task.state == "canceled":
+                task = await self.store.acknowledge_cancellation(
+                    task_id, self.owner_id, run_id
+                )
         except Exception:
-            task = await self.store.fail(task_id, self.owner_id, run_id, "research execution failed")
+            task = await self.store.get(task_id)
+            if task.state == "canceled":
+                task = await self.store.acknowledge_cancellation(
+                    task_id, self.owner_id, run_id
+                )
+            else:
+                try:
+                    task = await self.store.fail(
+                        task_id,
+                        self.owner_id,
+                        run_id,
+                        "research execution failed",
+                    )
+                except LeaseLost:
+                    task = await self.store.get(task_id)
         finally:
             heartbeat.cancel()
             await asyncio.gather(heartbeat, return_exceptions=True)
@@ -164,17 +215,23 @@ class DurableA2AService:
 
 
 def _a2a_task(snapshot: TaskSnapshot) -> dict[str, Any]:
+    states = {
+        "submitted": "TASK_STATE_SUBMITTED",
+        "working": "TASK_STATE_WORKING",
+        "completed": "TASK_STATE_COMPLETED",
+        "failed": "TASK_STATE_FAILED",
+        "canceled": "TASK_STATE_CANCELED",
+    }
     task: dict[str, Any] = {
         "id": str(snapshot.id),
         "contextId": str(snapshot.message_id),
-        "status": {"state": snapshot.state},
+        "status": {"state": states[snapshot.state]},
     }
     if snapshot.error:
         task["status"]["message"] = {
-            "kind": "message",
             "messageId": f"{snapshot.id}-error",
-            "role": "agent",
-            "parts": [{"kind": "text", "text": snapshot.error}],
+            "role": "ROLE_AGENT",
+            "parts": [{"text": snapshot.error}],
         }
     if snapshot.artifacts:
         task["artifacts"] = [
@@ -183,7 +240,6 @@ def _a2a_task(snapshot: TaskSnapshot) -> dict[str, Any]:
                 "name": "ResearchRun",
                 "parts": [
                     {
-                        "kind": "data",
                         "data": snapshot.artifacts[0].model_dump(mode="json"),
                     }
                 ],
@@ -223,14 +279,27 @@ def create_app(
         return {
             "name": "quick-research",
             "description": "Private durable Lustro research task service",
-            "url": os.environ.get("A2A_AGENT_URL", "http://research-agent:9000/"),
+            "supportedInterfaces": [
+                {
+                    "url": os.environ.get(
+                        "A2A_AGENT_URL", "http://research-agent:9000/"
+                    ),
+                    "protocolBinding": "JSONRPC",
+                    "protocolVersion": "1.0",
+                }
+            ],
             "version": "1.0.0",
-            "protocolVersion": "1.0",
             "capabilities": {"streaming": False},
             "defaultInputModes": ["application/json"],
             "defaultOutputModes": ["application/json"],
-            "securitySchemes": {"lustroBearer": {"type": "http", "scheme": "bearer"}},
-            "security": [{"lustroBearer": []}],
+            "securitySchemes": {
+                "lustroBearer": {
+                    "httpAuthSecurityScheme": {"scheme": "bearer"}
+                }
+            },
+            "securityRequirements": [
+                {"schemes": {"lustroBearer": {"list": []}}}
+            ],
             "skills": [
                 {
                     "id": "cluster-research-draft",
@@ -242,40 +311,44 @@ def create_app(
         }
 
     @app.post("/", dependencies=[Depends(authenticate)])
-    async def jsonrpc(body: dict[str, Any]) -> dict[str, Any]:
+    async def jsonrpc(
+        body: dict[str, Any],
+        a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
+    ) -> dict[str, Any]:
         request_id = body.get("id")
         response = {"jsonrpc": "2.0", "id": request_id}
         try:
             if body.get("jsonrpc") != "2.0":
                 raise ValueError("invalid JSON-RPC version")
+            if a2a_version != "1.0":
+                return response | {
+                    "error": {"code": -32009, "message": "Version not supported"}
+                }
             method = body.get("method")
             params = body.get("params")
             if not isinstance(params, dict):
                 raise ValueError("params must be an object")
-            if method == "message/send":
-                message = params.get("message")
-                if not isinstance(message, dict):
-                    raise ValueError("message is required")
-                parts = message.get("parts")
+            if method == "SendMessage":
+                request = ParseDict(params, a2a_pb2.SendMessageRequest())
+                message = request.message
                 if (
-                    message.get("kind") != "message"
-                    or message.get("role") != "user"
-                    or not isinstance(parts, list)
-                    or len(parts) != 1
-                    or not isinstance(parts[0], dict)
-                    or parts[0].get("kind") != "data"
+                    message.role != a2a_pb2.ROLE_USER
+                    or len(message.parts) != 1
+                    or message.parts[0].WhichOneof("content") != "data"
                 ):
                     raise ValueError("one user DataPart is required")
-                message_id = UUID(message["messageId"])
-                submission = LustroResearchSubmission.model_validate(parts[0].get("data"))
-                result = await service.submit(message_id, submission)
-            elif method in {"tasks/get", "tasks/cancel"}:
-                task_id = UUID(params["id"])
-                result = (
-                    await service.get(task_id)
-                    if method == "tasks/get"
-                    else await service.cancel(task_id)
+                message_id = UUID(message.message_id)
+                submission = LustroResearchSubmission.model_validate(
+                    _restore_json_integers(params["message"]["parts"][0]["data"])
                 )
+                result = await service.submit(message_id, submission)
+                return response | {"result": {"task": _a2a_task(result)}}
+            if method == "GetTask":
+                request = ParseDict(params, a2a_pb2.GetTaskRequest())
+                result = await service.get(UUID(request.id))
+            elif method == "CancelTask":
+                request = ParseDict(params, a2a_pb2.CancelTaskRequest())
+                result = await service.cancel(UUID(request.id))
             else:
                 return response | {
                     "error": {"code": -32601, "message": "Method not found"}
@@ -284,8 +357,8 @@ def create_app(
         except TaskNotFound:
             return response | {"error": {"code": -32001, "message": "Task not found"}}
         except SubmissionConflict:
-            return response | {"error": {"code": -32009, "message": "Message ID conflict"}}
-        except (KeyError, TypeError, ValueError, ValidationError):
+            return response | {"error": {"code": -32010, "message": "Message ID conflict"}}
+        except (KeyError, TypeError, ValueError, ValidationError, ParseError):
             return response | {"error": {"code": -32602, "message": "Invalid params"}}
 
     return app
@@ -320,7 +393,7 @@ def app_from_env() -> FastAPI:
 
     service = DurableA2AService(store, enqueue=enqueue)
 
-    async def configured_research(request, policy, seed_records):
+    async def configured_research(request, policy, seed_records, checkpoint):
         import boto3
 
         from .capture import EvidenceStore, S3Backend
@@ -342,6 +415,7 @@ def app_from_env() -> FastAPI:
             TavilySearch(),
             LiteLLMModel(),
             evidence_store,
+            checkpoint,
         )
 
     async def worker() -> None:

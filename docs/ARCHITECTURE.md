@@ -64,26 +64,34 @@ Claude/Codex routes, and rollback with retained data, must pass together.
 
 The optional `research` Compose profile adds a private FastAPI A2A service. It
 has no host-published port and accepts Agent Card discovery and JSON-RPC calls
-only with `LUSTRO_A2A_BEARER_TOKEN`. `message/send` accepts exactly one strict
-version-one `LustroResearchSubmission` DataPart containing `request`, trusted
-`policy`, and reviewed `seed_records`. The A2A `messageId` must equal the
-request ID.
+only with `LUSTRO_A2A_BEARER_TOKEN`. Its A2A 1.0 card advertises one JSON-RPC
+interface through `supportedInterfaces`; the route accepts the v1
+`SendMessage`, `GetTask`, and `CancelTask` methods and does not retain the
+legacy v0.3 method names. JSON-RPC requests must carry `A2A-Version: 1.0`;
+other or missing versions receive the standard version-not-supported error.
+`SendMessage` accepts exactly one strict version-one `LustroResearchSubmission`
+data part containing `request`, trusted `policy`, and reviewed `seed_records`.
+The A2A `messageId` must equal the request ID.
 
 Before any research work is queued, PostgreSQL inserts a task row with a unique
 `message_id`. Concurrent sends and retries after a lost acknowledgement read
-that row and do not queue another run. `tasks/get` returns durable state;
-`tasks/cancel` changes only submitted or working tasks. Completed tasks expose
+that row and do not queue another run. `GetTask` returns durable state;
+`CancelTask` changes only submitted or working tasks. Completed tasks expose
 one `ResearchRun` artifact and never echo the trusted submission envelope.
 Submitted tasks are recovered when the service starts. Working tasks carry a
 persisted run ID, lease owner, and heartbeat deadline; another instance cannot
 claim an active lease. Because a provider or archive side effect may already
 have occurred, an expired working lease fails closed for manual reconciliation
-instead of rerunning research. Owner/run fencing prevents a stale worker from
-persisting an artifact. Cancellation updates durable state and directly awaits
-the local execution when owned by the receiving instance. If another instance
-owns it, that owner's next heartbeat observes the canceled fence and cancels
-the in-flight coroutine within one second; conditional completion prevents artifacts after
-cancellation in either case.
+instead of rerunning research. Database-clock expiry predicates prevent the
+same owner and run from renewing or writing a terminal result after its lease
+deadline. The research executor also checks the durable owner/run/state/expiry
+fence immediately before each model, search, fetch, and archive operation.
+Cancellation keeps the owner lease attached until that execution acknowledges
+the fence. A local cancellation directly awaits its execution; a remote
+`CancelTask` waits for the owner's next checkpoint (or durable lease expiry)
+before returning, so its response cannot precede a subsequent external
+operation. Conditional terminal writes continue to prevent artifacts after
+cancellation.
 
 The profile is intentionally disabled by default. Configure a dedicated
 LiteLLM virtual key, private S3-compatible archive bucket, and dedicated inbound

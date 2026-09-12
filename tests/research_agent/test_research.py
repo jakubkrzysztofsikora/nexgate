@@ -242,3 +242,37 @@ def test_host_run_and_retry_budget_and_final_archive_verification():
         with pytest.raises(CaptureError):
             await research_cluster(request, policy, Search(), DeletingModel(), store)
     run(scenario())
+
+
+def test_cancellation_checkpoint_precedes_the_next_archive_operation():
+    async def scenario():
+        request, draft, records, policy, _ = setup_case()
+
+        class CountingBackend(MemoryBackend):
+            reads = 0
+
+            async def get(self, key, limit):
+                self.reads += 1
+                return await super().get(key, limit)
+
+        backend = CountingBackend()
+        store = EvidenceStore(backend)
+        archive = await store.put_content_addressed(b'seed')
+        backend.reads = 0
+        seed = change(
+            records['src:1'],
+            archive_ref=archive,
+            content_sha256=archive.rsplit('/', 1)[1],
+        )
+        store.seed_records = (seed,)
+
+        async def canceled():
+            raise asyncio.CancelledError
+
+        with pytest.raises(asyncio.CancelledError):
+            await research_cluster(
+                request, policy, object(), object(), store, canceled
+            )
+        assert backend.reads == 0
+
+    run(scenario())
