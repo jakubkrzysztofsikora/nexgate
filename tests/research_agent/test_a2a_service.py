@@ -295,6 +295,42 @@ def test_cancel_signals_and_awaits_local_execution_without_artifact(tmp_path):
     run(scenario())
 
 
+def test_cross_instance_cancel_stops_the_owning_execution(tmp_path):
+    async def scenario():
+        store, owner, _ = await make_service(tmp_path)
+        owner.lease_seconds = 0.3
+        remote = DurableA2AService(store, enqueue=lambda _task_id: asyncio.sleep(0))
+        envelope, result = submission()
+        task = await owner.submit(envelope.request.request_id, envelope)
+        started = asyncio.Event()
+        stopped = asyncio.Event()
+
+        async def research(*_args):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+            return result
+
+        execution = asyncio.create_task(owner.execute(task.id, research))
+        await started.wait()
+        assert (await remote.cancel(task.id)).state == "canceled"
+        try:
+            await asyncio.wait_for(stopped.wait(), timeout=0.8)
+        except TimeoutError:
+            execution.cancel()
+            await execution
+            raise
+        completed = await asyncio.wait_for(asyncio.shield(execution), timeout=0.5)
+        assert completed.state == "canceled"
+        assert stopped.is_set()
+        assert (await owner.get(task.id)).artifacts == []
+        await store.dispose()
+
+    run(scenario())
+
+
 def test_private_jsonrpc_requires_bearer_and_strict_lustro_data_part(tmp_path):
     async def scenario():
         store, service, enqueued = await make_service(tmp_path)

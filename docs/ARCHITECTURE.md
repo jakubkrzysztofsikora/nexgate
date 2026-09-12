@@ -79,9 +79,11 @@ persisted run ID, lease owner, and heartbeat deadline; another instance cannot
 claim an active lease. Because a provider or archive side effect may already
 have occurred, an expired working lease fails closed for manual reconciliation
 instead of rerunning research. Owner/run fencing prevents a stale worker from
-persisting an artifact. Cancellation updates durable state, signals and awaits
-the local execution when owned by the receiving instance, and conditional
-completion prevents artifacts after cancellation.
+persisting an artifact. Cancellation updates durable state and directly awaits
+the local execution when owned by the receiving instance. If another instance
+owns it, that owner's next heartbeat observes the canceled fence and cancels
+the in-flight coroutine; conditional completion prevents artifacts after
+cancellation in either case.
 
 The profile is intentionally disabled by default. Configure a dedicated
 LiteLLM virtual key, private S3-compatible archive bucket, and dedicated inbound

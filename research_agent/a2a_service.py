@@ -157,6 +157,9 @@ class DurableA2AService:
         while True:
             await asyncio.sleep(interval)
             if not await self.store.heartbeat(task_id, self.owner_id, run_id, lease_seconds=self.lease_seconds):
+                execution = self._executions.get(task_id)
+                if execution is not None and not execution.done():
+                    execution.cancel()
                 return
 
 
