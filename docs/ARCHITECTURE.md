@@ -84,14 +84,26 @@ claim an active lease. Because a provider or archive side effect may already
 have occurred, an expired working lease fails closed for manual reconciliation
 instead of rerunning research. Database-clock expiry predicates prevent the
 same owner and run from renewing or writing a terminal result after its lease
-deadline. The research executor also checks the durable owner/run/state/expiry
-fence immediately before each model, search, fetch, and archive operation.
-Cancellation keeps the owner lease attached until that execution acknowledges
-the fence. A local cancellation directly awaits its execution; a remote
-`CancelTask` waits for the owner's next checkpoint (or durable lease expiry)
-before returning, so its response cannot precede a subsequent external
-operation. Conditional terminal writes continue to prevent artifacts after
-cancellation.
+deadline. The research executor checks the durable owner/run/state/expiry fence
+at its model, search, fetch, and archive boundaries, and Tavily checks before
+each query. Redirects and archive-helper steps within an operation may continue
+until the executor reaches its next checkpoint.
+Cancellation records a durable `cancel_requested` flag while retaining the
+working state and owner lease. Both local and remote `CancelTask` return A2A
+`TASK_STATE_WORKING` with "Cancellation pending owner acknowledgement" until
+the owner unwinds at a checkpoint or finishes its current execution. Poll
+`GetTask` for terminal acknowledgement. Pending cancellation can precede further
+steps within an already-running operation, such as archive read-after-write
+verification; it is not a claim that side effects have stopped. Requests never
+force-cancel an asynchronous wrapper around a still-running S3 thread. The owner
+can acknowledge cancellation only with a valid lease, and conditional terminal
+writes prevent artifacts after a cancellation request. Expired leases fail
+closed for manual reconciliation; expiry never acknowledges cancellation.
+An unclaimed submitted task can be canceled immediately because it has no owner.
+Reapply migration 001 before starting the updated service: it adds the flag
+idempotently and marks legacy canceled rows that retain an owner as failed for
+manual reconciliation. Historical rows whose owner was already cleared cannot
+be retrospectively verified by this migration.
 
 The profile is intentionally disabled by default. Configure a dedicated
 LiteLLM virtual key, private S3-compatible archive bucket, and dedicated inbound

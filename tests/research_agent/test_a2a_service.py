@@ -273,7 +273,7 @@ def test_expired_owner_checkpoint_blocks_external_operation(tmp_path):
             return result
 
         observed = await service.execute(task.id, research)
-        assert observed.state == "working"
+        assert observed.state == "failed"
         assert external_steps == []
         await store.dispose()
 
@@ -345,18 +345,20 @@ def test_completed_and_failed_tasks_are_terminal(tmp_path):
     run(scenario())
 
 
-def test_cancel_signals_and_awaits_local_execution_without_artifact(tmp_path):
+def test_local_cancel_remains_pending_until_cooperative_checkpoint(tmp_path):
     async def scenario():
         store, service, _ = await make_service(tmp_path)
         envelope, result = submission()
         task = await service.submit(envelope.request.request_id, envelope)
         started = asyncio.Event()
         stopped = asyncio.Event()
+        release = asyncio.Event()
 
         async def research(*_args):
             started.set()
             try:
-                await asyncio.Event().wait()
+                await release.wait()
+                await _args[3]()
             finally:
                 stopped.set()
             return result
@@ -364,8 +366,10 @@ def test_cancel_signals_and_awaits_local_execution_without_artifact(tmp_path):
         execution = asyncio.create_task(service.execute(task.id, research))
         await started.wait()
         canceled = await service.cancel(task.id)
-        assert canceled.state == "canceled"
-        assert stopped.is_set()
+        assert canceled.state == "working"
+        assert canceled.cancellation_pending
+        assert not stopped.is_set()
+        release.set()
         assert (await execution).state == "canceled"
         persisted = await service.get(task.id)
         assert persisted.state == "canceled"
@@ -383,18 +387,21 @@ def test_cross_instance_cancel_stops_the_owning_execution(tmp_path):
         task = await owner.submit(envelope.request.request_id, envelope)
         started = asyncio.Event()
         stopped = asyncio.Event()
+        release = asyncio.Event()
 
         async def research(*_args):
             started.set()
             try:
-                await asyncio.Event().wait()
+                await release.wait()
+                await _args[3]()
             finally:
                 stopped.set()
             return result
 
         execution = asyncio.create_task(owner.execute(task.id, research))
         await started.wait()
-        assert (await remote.cancel(task.id)).state == "canceled"
+        assert (await remote.cancel(task.id)).cancellation_pending
+        release.set()
         try:
             await asyncio.wait_for(stopped.wait(), timeout=1.5)
         except TimeoutError:
@@ -463,7 +470,7 @@ def test_cancel_returned_during_first_tavily_call_blocks_remaining_queries(tmp_p
         execution = asyncio.create_task(owner.execute(task.id, research))
         try:
             await asyncio.wait_for(started.wait(), 2)
-            assert (await asyncio.wait_for(remote.cancel(task.id), 3)).state == "canceled"
+            assert (await asyncio.wait_for(remote.cancel(task.id), 3)).cancellation_pending
             events.append("CANCEL_RETURNED")
             release.set()
             assert (await asyncio.wait_for(execution, 2)).state == "canceled"
@@ -477,7 +484,7 @@ def test_cancel_returned_during_first_tavily_call_blocks_remaining_queries(tmp_p
     run(scenario())
 
 
-def test_cross_instance_cancel_waits_for_checkpoint_before_returning(tmp_path):
+def test_cross_instance_cancel_terminal_only_after_checkpoint(tmp_path):
     async def scenario():
         store, owner, _ = await make_service(tmp_path)
         remote = DurableA2AService(store, enqueue=lambda _task_id: asyncio.sleep(0))
@@ -497,16 +504,14 @@ def test_cross_instance_cancel_waits_for_checkpoint_before_returning(tmp_path):
 
         execution = asyncio.create_task(owner.execute(task.id, research))
         await operation_started.wait()
-        cancellation = asyncio.create_task(remote.cancel(task.id))
-        while (await store.get(task.id)).state != "canceled":
-            await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        assert not cancellation.done()
+        pending = await remote.cancel(task.id)
+        assert pending.state == "working"
+        assert pending.cancellation_pending
+        assert not await store.cancellation_acknowledged(task.id)
 
         release_operation.set()
-        canceled = await asyncio.wait_for(cancellation, timeout=0.5)
         completed = await asyncio.wait_for(execution, timeout=0.5)
-        assert canceled.state == "canceled"
+        assert (await remote.cancel(task.id)).state == "canceled"
         assert completed.state == "canceled"
         assert external_steps == []
         await store.dispose()
@@ -530,14 +535,11 @@ def test_cross_instance_cancel_is_acknowledged_when_inflight_operation_fails(tmp
 
         execution = asyncio.create_task(owner.execute(task.id, research))
         await operation_started.wait()
-        cancellation = asyncio.create_task(remote.cancel(task.id))
-        while (await store.get(task.id)).state != "canceled":
-            await asyncio.sleep(0)
+        assert (await remote.cancel(task.id)).cancellation_pending
         release_operation.set()
 
-        canceled = await asyncio.wait_for(cancellation, timeout=0.5)
         observed = await asyncio.wait_for(execution, timeout=0.5)
-        assert canceled.state == "canceled"
+        assert (await remote.get(task.id)).state == "canceled"
         assert observed.state == "canceled"
         await store.dispose()
 

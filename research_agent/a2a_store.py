@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, func, inspect, select, update
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, MetaData, String, Table, func, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -21,6 +21,7 @@ tasks = Table(
     Column("submission", JSON, nullable=False),
     Column("submission_commitment", String(64), nullable=False),
     Column("state", String(16), nullable=False),
+    Column("cancel_requested", Boolean, nullable=False, default=False, server_default="false"),
     Column("artifact", JSON), Column("error", String(500)),
     Column("run_count", Integer, nullable=False, default=0),
     Column("run_id", String(36)), Column("lease_owner", String(200)),
@@ -36,6 +37,7 @@ class StoredTask:
     message_id: UUID
     submission_commitment: str
     state: str
+    cancel_requested: bool
     artifact: dict[str, Any] | None
     error: str | None
     run_id: UUID | None
@@ -64,7 +66,7 @@ def _aware(value: datetime | None) -> datetime | None:
 def _stored(row: Any) -> StoredTask:
     return StoredTask(
         id=UUID(row.id), message_id=UUID(row.message_id),
-        submission_commitment=row.submission_commitment, state=row.state,
+        submission_commitment=row.submission_commitment, state=row.state, cancel_requested=row.cancel_requested,
         artifact=row.artifact, error=row.error,
         run_id=UUID(row.run_id) if row.run_id else None, lease_owner=row.lease_owner,
         lease_expires_at=_aware(row.lease_expires_at), created_at=_aware(row.created_at),
@@ -190,6 +192,7 @@ class SQLAlchemyA2ATaskStore:
             result = await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
+                    tasks.c.cancel_requested.is_(False),
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
                     tasks.c.lease_expires_at > self._clock(),
                 ).values(state=state, artifact=artifact, error=error, lease_owner=None,
@@ -207,7 +210,7 @@ class SQLAlchemyA2ATaskStore:
             )
             await connection.execute(
                 update(tasks).where(tasks.c.id == str(task_id), tasks.c.state == "working").values(
-                    state="canceled", artifact=None, updated_at=datetime.now(UTC))
+                    cancel_requested=True, updated_at=datetime.now(UTC))
             )
         return await self.get(task_id)
 
@@ -215,30 +218,26 @@ class SQLAlchemyA2ATaskStore:
         self, task_id: UUID, owner: str, run_id: UUID
     ) -> StoredTask:
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             await connection.execute(
                 update(tasks).where(
-                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
+                    tasks.c.id == str(task_id), tasks.c.state == "working",
+                    tasks.c.cancel_requested.is_(True),
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
+                    tasks.c.lease_expires_at > self._clock(),
                 ).values(
-                    lease_owner=None, lease_expires_at=None, updated_at=datetime.now(UTC)
+                    state="canceled", artifact=None, lease_owner=None, lease_expires_at=None, updated_at=now
                 )
             )
         return await self.get(task_id)
 
     async def run_active(self, task_id: UUID, owner: str, run_id: UUID) -> bool:
         async with self.engine.begin() as connection:
-            now = await self._lock_task(connection, task_id)
-            await connection.execute(
-                update(tasks).where(
-                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
-                    tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
-                ).values(
-                    lease_owner=None, lease_expires_at=None, updated_at=now
-                )
-            )
+            await self._lock_task(connection, task_id)
             active = await connection.scalar(
                 select(tasks.c.id).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
+                    tasks.c.cancel_requested.is_(False),
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
                     tasks.c.lease_expires_at > self._clock(),
                 )
@@ -246,22 +245,8 @@ class SQLAlchemyA2ATaskStore:
         return active is not None
 
     async def cancellation_acknowledged(self, task_id: UUID) -> bool:
-        async with self.engine.begin() as connection:
-            now = await self._lock_task(connection, task_id)
-            await connection.execute(
-                update(tasks).where(
-                    tasks.c.id == str(task_id), tasks.c.state == "canceled",
-                    tasks.c.lease_owner.is_not(None),
-                    tasks.c.lease_expires_at.is_not(None),
-                    tasks.c.lease_expires_at <= self._clock(),
-                ).values(
-                    lease_owner=None, lease_expires_at=None, updated_at=now
-                )
-            )
-            owner = await connection.scalar(
-                select(tasks.c.lease_owner).where(tasks.c.id == str(task_id))
-            )
-        return owner is None
+        task = await self.get(task_id)
+        return task.state == "canceled" and task.lease_owner is None
 
     async def recoverable(self) -> list[UUID]:
         async with self.engine.begin() as connection:

@@ -65,6 +65,11 @@ class TaskSnapshot(StrictModel):
     state: Literal["submitted", "working", "completed", "failed", "canceled"]
     artifacts: Annotated[list[ResearchRun], Field(max_length=1)] = Field(default_factory=list)
     error: str | None = None
+    cancellation_pending: bool = False
+
+
+class _RunStopped(Exception):
+    """The owner reached a durable checkpoint and must unwind execution."""
 
 
 ResearchExecutor = Callable[
@@ -98,6 +103,7 @@ def _snapshot(task: StoredTask) -> TaskSnapshot:
         state=task.state,
         artifacts=artifacts,
         error=task.error,
+        cancellation_pending=task.state == "working" and task.cancel_requested,
     )
 
 
@@ -127,17 +133,6 @@ class DurableA2AService:
 
     async def cancel(self, task_id: UUID) -> TaskSnapshot:
         task = await self.store.cancel(task_id)
-        if task.state != "canceled" or task.lease_owner is None:
-            return _snapshot(task)
-        execution = self._executions.get(task_id)
-        if execution is not None and execution is not asyncio.current_task() and not execution.done():
-            execution.cancel()
-            await asyncio.gather(execution, return_exceptions=True)
-            task = await self.store.get(task_id)
-        else:
-            while not await self.store.cancellation_acknowledged(task_id):
-                await asyncio.sleep(0.01)
-            task = await self.store.get(task_id)
         return _snapshot(task)
 
     async def recover_pending(self) -> int:
@@ -157,7 +152,7 @@ class DurableA2AService:
 
         async def checkpoint() -> None:
             if not await self.store.run_active(task_id, self.owner_id, run_id):
-                raise asyncio.CancelledError
+                raise _RunStopped
 
         try:
             submission = LustroResearchSubmission.model_validate(
@@ -173,17 +168,15 @@ class DurableA2AService:
                 result.model_dump() if isinstance(result, ResearchRun) else result
             )
             task = await self.store.complete(task_id, self.owner_id, run_id, result.model_dump(mode="json"))
-        except LeaseLost:
+        except (LeaseLost, _RunStopped):
+            task = await self.store.acknowledge_cancellation(task_id, self.owner_id, run_id)
+        except (asyncio.CancelledError, TimeoutError):
+            # Cancellation of an await does not stop a to_thread provider call.
+            # Leave this run unacknowledged for lease-expiry reconciliation.
             task = await self.store.get(task_id)
-        except asyncio.CancelledError:
-            task = await self.store.get(task_id)
-            if task.state == "canceled":
-                task = await self.store.acknowledge_cancellation(
-                    task_id, self.owner_id, run_id
-                )
         except Exception:
             task = await self.store.get(task_id)
-            if task.state == "canceled":
+            if task.cancel_requested:
                 task = await self.store.acknowledge_cancellation(
                     task_id, self.owner_id, run_id
                 )
@@ -196,11 +189,14 @@ class DurableA2AService:
                         "research execution failed",
                     )
                 except LeaseLost:
-                    task = await self.store.get(task_id)
+                    task = await self.store.acknowledge_cancellation(task_id, self.owner_id, run_id)
         finally:
             heartbeat.cancel()
             await asyncio.gather(heartbeat, return_exceptions=True)
             self._executions.pop(task_id, None)
+        if task.state == "working":
+            await self.store.recoverable()
+            task = await self.store.get(task_id)
         return _snapshot(task)
 
     async def _heartbeat(self, task_id: UUID, run_id: UUID) -> None:
@@ -208,9 +204,6 @@ class DurableA2AService:
         while True:
             await asyncio.sleep(interval)
             if not await self.store.heartbeat(task_id, self.owner_id, run_id, lease_seconds=self.lease_seconds):
-                execution = self._executions.get(task_id)
-                if execution is not None and not execution.done():
-                    execution.cancel()
                 return
 
 
@@ -227,11 +220,14 @@ def _a2a_task(snapshot: TaskSnapshot) -> dict[str, Any]:
         "contextId": str(snapshot.message_id),
         "status": {"state": states[snapshot.state]},
     }
-    if snapshot.error:
+    status_message = snapshot.error
+    if snapshot.cancellation_pending:
+        status_message = "Cancellation pending owner acknowledgement"
+    if status_message:
         task["status"]["message"] = {
             "messageId": f"{snapshot.id}-error",
             "role": "ROLE_AGENT",
-            "parts": [{"text": snapshot.error}],
+            "parts": [{"text": status_message}],
         }
     if snapshot.artifacts:
         task["artifacts"] = [

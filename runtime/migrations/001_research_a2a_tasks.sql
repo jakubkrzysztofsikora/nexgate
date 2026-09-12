@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS research_a2a_tasks (
 ALTER TABLE research_a2a_tasks ADD COLUMN IF NOT EXISTS run_id text;
 ALTER TABLE research_a2a_tasks ADD COLUMN IF NOT EXISTS lease_owner character varying(200);
 ALTER TABLE research_a2a_tasks ADD COLUMN IF NOT EXISTS lease_expires_at timestamp with time zone;
+ALTER TABLE research_a2a_tasks ADD COLUMN IF NOT EXISTS cancel_requested boolean NOT NULL DEFAULT false;
+
+-- The previous cancellation state was terminal before owner acknowledgement.
+UPDATE research_a2a_tasks SET state = 'failed', artifact = NULL,
+    error = 'legacy cancellation unacknowledged; manual reconciliation required',
+    lease_owner = NULL, lease_expires_at = NULL
+WHERE state = 'canceled' AND lease_owner IS NOT NULL;
 
 DO $$
 BEGIN
