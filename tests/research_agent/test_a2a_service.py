@@ -298,7 +298,6 @@ def test_cancel_signals_and_awaits_local_execution_without_artifact(tmp_path):
 def test_cross_instance_cancel_stops_the_owning_execution(tmp_path):
     async def scenario():
         store, owner, _ = await make_service(tmp_path)
-        owner.lease_seconds = 0.3
         remote = DurableA2AService(store, enqueue=lambda _task_id: asyncio.sleep(0))
         envelope, result = submission()
         task = await owner.submit(envelope.request.request_id, envelope)
@@ -317,7 +316,7 @@ def test_cross_instance_cancel_stops_the_owning_execution(tmp_path):
         await started.wait()
         assert (await remote.cancel(task.id)).state == "canceled"
         try:
-            await asyncio.wait_for(stopped.wait(), timeout=0.8)
+            await asyncio.wait_for(stopped.wait(), timeout=1.5)
         except TimeoutError:
             execution.cancel()
             await execution

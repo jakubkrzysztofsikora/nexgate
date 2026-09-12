@@ -82,7 +82,7 @@ instead of rerunning research. Owner/run fencing prevents a stale worker from
 persisting an artifact. Cancellation updates durable state and directly awaits
 the local execution when owned by the receiving instance. If another instance
 owns it, that owner's next heartbeat observes the canceled fence and cancels
-the in-flight coroutine; conditional completion prevents artifacts after
+the in-flight coroutine within one second; conditional completion prevents artifacts after
 cancellation in either case.
 
 The profile is intentionally disabled by default. Configure a dedicated

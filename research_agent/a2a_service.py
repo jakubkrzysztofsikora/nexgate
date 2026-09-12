@@ -153,7 +153,7 @@ class DurableA2AService:
         return _snapshot(task)
 
     async def _heartbeat(self, task_id: UUID, run_id: UUID) -> None:
-        interval = max(0.1, min(30.0, self.lease_seconds / 3))
+        interval = max(0.1, min(1.0, self.lease_seconds / 3))
         while True:
             await asyncio.sleep(interval)
             if not await self.store.heartbeat(task_id, self.owner_id, run_id, lease_seconds=self.lease_seconds):
