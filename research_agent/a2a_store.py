@@ -140,9 +140,22 @@ class SQLAlchemyA2ATaskStore:
             raise TaskNotFound(str(task_id))
         return value
 
+    def _clock(self):
+        if self.engine.dialect.name == "postgresql":
+            return func.clock_timestamp()
+        return func.strftime("%Y-%m-%d %H:%M:%f", "now", type_=DateTime(timezone=True))
+
+    async def _lock_task(self, connection, task_id: UUID) -> datetime:
+        # Acquire the row before reading time: PostgreSQL now() predates lock waits.
+        await connection.execute(
+            select(tasks.c.id).where(tasks.c.id == str(task_id)).with_for_update()
+        )
+        return _aware(await connection.scalar(select(self._clock())))
+
     async def claim(self, task_id: UUID, owner: str, *, lease_seconds: float) -> UUID | None:
-        now, run_id = datetime.now(UTC), uuid4()
+        run_id = uuid4()
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             result = await connection.execute(
                 update(tasks).where(tasks.c.id == str(task_id), tasks.c.state == "submitted").values(
                     state="working", run_count=tasks.c.run_count + 1, run_id=str(run_id),
@@ -152,13 +165,13 @@ class SQLAlchemyA2ATaskStore:
         return run_id if result.rowcount == 1 else None
 
     async def heartbeat(self, task_id: UUID, owner: str, run_id: UUID, *, lease_seconds: float) -> bool:
-        now = datetime.now(UTC)
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             result = await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
-                    tasks.c.lease_expires_at > func.now(),
+                    tasks.c.lease_expires_at > self._clock(),
                 ).values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
             )
         return result.rowcount == 1
@@ -173,13 +186,14 @@ class SQLAlchemyA2ATaskStore:
 
     async def _terminal_update(self, task_id: UUID, owner: str, run_id: UUID, state: str, *, artifact=None, error=None) -> None:
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             result = await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
-                    tasks.c.lease_expires_at > func.now(),
+                    tasks.c.lease_expires_at > self._clock(),
                 ).values(state=state, artifact=artifact, error=error, lease_owner=None,
-                         lease_expires_at=None, updated_at=datetime.now(UTC))
+                         lease_expires_at=None, updated_at=now)
             )
         if result.rowcount != 1:
             raise LeaseLost("research run lease is no longer valid")
@@ -213,33 +227,35 @@ class SQLAlchemyA2ATaskStore:
 
     async def run_active(self, task_id: UUID, owner: str, run_id: UUID) -> bool:
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "canceled",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
                 ).values(
-                    lease_owner=None, lease_expires_at=None, updated_at=func.now()
+                    lease_owner=None, lease_expires_at=None, updated_at=now
                 )
             )
             active = await connection.scalar(
                 select(tasks.c.id).where(
                     tasks.c.id == str(task_id), tasks.c.state == "working",
                     tasks.c.lease_owner == owner, tasks.c.run_id == str(run_id),
-                    tasks.c.lease_expires_at > func.now(),
+                    tasks.c.lease_expires_at > self._clock(),
                 )
             )
         return active is not None
 
     async def cancellation_acknowledged(self, task_id: UUID) -> bool:
         async with self.engine.begin() as connection:
+            now = await self._lock_task(connection, task_id)
             await connection.execute(
                 update(tasks).where(
                     tasks.c.id == str(task_id), tasks.c.state == "canceled",
                     tasks.c.lease_owner.is_not(None),
                     tasks.c.lease_expires_at.is_not(None),
-                    tasks.c.lease_expires_at <= func.now(),
+                    tasks.c.lease_expires_at <= self._clock(),
                 ).values(
-                    lease_owner=None, lease_expires_at=None, updated_at=func.now()
+                    lease_owner=None, lease_expires_at=None, updated_at=now
                 )
             )
             owner = await connection.scalar(
@@ -248,13 +264,12 @@ class SQLAlchemyA2ATaskStore:
         return owner is None
 
     async def recoverable(self) -> list[UUID]:
-        now = datetime.now(UTC)
         async with self.engine.begin() as connection:
             await connection.execute(
                 update(tasks).where(tasks.c.state == "working", tasks.c.lease_expires_at.is_not(None),
-                                    tasks.c.lease_expires_at <= now).values(
+                                    tasks.c.lease_expires_at <= self._clock()).values(
                     state="failed", error="research worker lease expired; manual reconciliation required",
-                    lease_owner=None, lease_expires_at=None, updated_at=now)
+                    lease_owner=None, lease_expires_at=None, updated_at=self._clock())
             )
             rows = (await connection.execute(select(tasks.c.id).where(tasks.c.state == "submitted").order_by(tasks.c.created_at))).scalars().all()
         return [UUID(task_id) for task_id in rows]

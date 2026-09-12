@@ -69,7 +69,7 @@ async def research_cluster(
             queries = list(plan.model_dump().values())[:policy.max_queries_per_iteration]
             await checkpoint()
             hits = await search.search(queries, policy, remaining_sources=policy.max_sources - len(records),
-                                       excluded_urls=frozenset(seen))
+                                       excluded_urls=frozenset(seen), checkpoint=checkpoint)
             queries_used += len(queries)
             if len(hits) > policy.max_sources:
                 raise PolicyViolation('search result budget exceeded')

@@ -15,7 +15,7 @@ class TavilySearch:
         self.endpoint = endpoint
         self.client = client or SourceClient()
 
-    async def search(self, queries, policy, *, remaining_sources=None, excluded_urls=()):
+    async def search(self, queries, policy, *, remaining_sources=None, excluded_urls=(), checkpoint=None):
         if not self.api_key:
             raise AdapterError('search credentials missing')
         if not 1 <= len(queries) <= policy.max_queries_per_iteration:
@@ -28,6 +28,8 @@ class TavilySearch:
         for query in queries:
             if not isinstance(query, str) or not query.strip() or len(query) > 500:
                 raise AdapterError('invalid search query')
+            if checkpoint is not None:
+                await checkpoint()
             response = await post_json(self.endpoint, {
                 'query': query, 'search_depth': 'basic', 'max_results': min(policy.max_sources, 20),
                 'include_answer': False, 'include_raw_content': False,

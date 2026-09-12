@@ -410,6 +410,73 @@ def test_cross_instance_cancel_stops_the_owning_execution(tmp_path):
     run(scenario())
 
 
+def test_cancel_returned_during_first_tavily_call_blocks_remaining_queries(tmp_path, monkeypatch):
+    from research_agent.capture import EvidenceStore
+    from research_agent.research import QueryPlan, research_cluster
+    from research_agent.search_tavily import TavilySearch
+    from test_research import MemoryBackend
+    from test_policy import digest
+
+    async def scenario():
+        store, owner, _ = await make_service(tmp_path)
+        owner.lease_seconds = 0.15
+
+        async def unavailable_heartbeat(*args):
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(owner, "_heartbeat", unavailable_heartbeat)
+        remote = DurableA2AService(store, enqueue=lambda _: asyncio.sleep(0))
+        envelope, result = submission()
+        archive = EvidenceStore(MemoryBackend())
+        key = await archive.put_content_addressed(b"seed")
+        seed = envelope.seed_records[0].model_copy(update={
+            "archive_ref": key, "content_sha256": key.rsplit("/", 1)[1],
+        })
+        authority = envelope.policy.evidence_authorities[0].model_copy(update={"record_sha256": digest(seed)})
+        policy = envelope.policy.model_copy(update={"evidence_authorities": [authority]})
+        envelope = envelope.model_copy(update={"seed_records": [seed], "policy": policy})
+        archive.seed_records = (seed,)
+        task = await owner.submit(envelope.request.request_id, envelope)
+        started, release = asyncio.Event(), asyncio.Event()
+        events = []
+
+        async def provider(url, payload, key, policy):
+            events.append(payload["query"])
+            if payload["query"] == "first":
+                started.set()
+                await release.wait()
+            return {"results": []}
+
+        class Model:
+            alias = "test-model"
+
+            async def plan_queries(self, *args):
+                return QueryPlan(primary="first", contrary="second", correction="third", ownership="fourth")
+
+            async def synthesize(self, *args):
+                return result.draft
+
+        async def research(request, policy, seeds, checkpoint):
+            return await research_cluster(request, policy, TavilySearch(api_key="fixture"), Model(), archive, checkpoint)
+
+        monkeypatch.setattr("research_agent.search_tavily.post_json", provider)
+        execution = asyncio.create_task(owner.execute(task.id, research))
+        try:
+            await asyncio.wait_for(started.wait(), 2)
+            assert (await asyncio.wait_for(remote.cancel(task.id), 3)).state == "canceled"
+            events.append("CANCEL_RETURNED")
+            release.set()
+            assert (await asyncio.wait_for(execution, 2)).state == "canceled"
+            assert events == ["first", "CANCEL_RETURNED"]
+            assert (await store.get(task.id)).artifact is None
+        finally:
+            release.set()
+            await asyncio.gather(execution, return_exceptions=True)
+            await store.dispose()
+
+    run(scenario())
+
+
 def test_cross_instance_cancel_waits_for_checkpoint_before_returning(tmp_path):
     async def scenario():
         store, owner, _ = await make_service(tmp_path)
