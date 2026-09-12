@@ -41,10 +41,14 @@ def test_postgres_migration_applies_reapplies_and_passes_preflight():
     try:
         for _ in range(60):
             result = subprocess.run(
-                ["docker", "exec", name, "pg_isready", "-U", "postgres", "-d", "nexgate"],
+                [
+                    "docker", "exec", name, "psql", "-U", "postgres", "-d", "nexgate",
+                    "-Atc", "SELECT 1",
+                ],
+                text=True,
                 capture_output=True,
             )
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout.strip() == "1":
                 break
             time.sleep(0.25)
         else:
