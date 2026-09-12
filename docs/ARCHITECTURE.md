@@ -60,6 +60,35 @@ A successful image build or offline suite is not approval to deploy: all real
 integration checks, including schema upgrade, caller spend attribution,
 Claude/Codex routes, and rollback with retained data, must pass together.
 
+## Durable Lustro research service
+
+The optional `research` Compose profile adds a private FastAPI A2A service. It
+has no host-published port and accepts Agent Card discovery and JSON-RPC calls
+only with `LUSTRO_A2A_BEARER_TOKEN`. `message/send` accepts exactly one strict
+version-one `LustroResearchSubmission` DataPart containing `request`, trusted
+`policy`, and reviewed `seed_records`. The A2A `messageId` must equal the
+request ID.
+
+Before any research work is queued, PostgreSQL inserts a task row with a unique
+`message_id`. Concurrent sends and retries after a lost acknowledgement read
+that row and do not queue another run. `tasks/get` returns durable state;
+`tasks/cancel` changes only submitted or working tasks. Completed tasks expose
+one `ResearchRun` artifact and never echo the trusted submission envelope.
+Submitted and interrupted working tasks are recovered when the service starts,
+while a conditional state transition ensures only one worker claims a task.
+
+The profile is intentionally disabled by default. Configure a dedicated
+LiteLLM virtual key, private S3-compatible archive bucket, and dedicated inbound
+Lustro token before starting it:
+
+```bash
+docker compose --profile research up -d research-agent
+```
+
+Starting the container is not authorization to enable Lustro publication or to
+run paid research. Cross-repository container, custody, migration, and disabled
+feature gates remain required.
+
 ## Profiles
 
 - Default: LiteLLM, Postgres, and Redis, exposed only on loopback.

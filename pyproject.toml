@@ -13,13 +13,24 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Testing",
 ]
-dependencies = []
+dependencies = [
+    "asyncpg==0.31.0",
+    "boto3==1.40.62",
+    "fastapi==0.139.0",
+    "greenlet==3.3.2",
+    "httpx==0.28.1",
+    "pydantic==2.13.5",
+    "sqlalchemy==2.0.51",
+    "uvicorn==0.41.0",
+]
 
 [dependency-groups]
 dev = [
   "PyYAML==6.0.3",
+  "aiosqlite==0.22.1",
   "pytest==9.0.2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

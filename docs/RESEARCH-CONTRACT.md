@@ -1,5 +1,12 @@
 # Research draft contract
 
+The private durable transport wraps this contract in
+`LustroResearchSubmission {schema_version, request, policy, seed_records}`.
+The envelope is accepted only with Lustro's dedicated bearer credential and is
+stored for worker recovery, but never returned through task reads. Its A2A
+`messageId` is the sole remote idempotency key and must equal
+`request.request_id`; duplicate sends return the originally reserved task.
+
 `research_agent.models` defines the version-one request, draft, assertion,
 coverage, representative, comment-aggregate, evidence-record, and binding wire
 objects. Unknown fields are rejected, fields are bounded, and instances are

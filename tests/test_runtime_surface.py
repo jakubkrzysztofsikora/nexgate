@@ -45,6 +45,18 @@ def test_runtime_compose_is_loopback_bound_and_has_optional_observability() -> N
         assert all(str(port).startswith("127.0.0.1:") for port in services[service]["ports"])
 
 
+def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
+    compose = yaml.safe_load((ROOT / "compose.nexgate.yaml").read_text())
+    service = compose["services"]["research-agent"]
+    assert service["profiles"] == ["research"]
+    assert not service.get("ports")
+    assert service["environment"]["A2A_DATABASE_URL"].startswith("postgresql+asyncpg://")
+    assert service["environment"]["LUSTRO_A2A_BEARER_TOKEN"]
+    dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()
+    assert "uv sync --frozen --no-dev" in dockerfile
+    assert "research_agent.a2a_service:app_from_env" in dockerfile
+
+
 def test_harness_wiring_uses_portable_defaults() -> None:
     harness = (ROOT / "bin/nexgate").read_text()
     assert "127.0.0.1" in harness

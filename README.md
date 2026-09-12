@@ -133,6 +133,7 @@ run, use `NEXGATE_SKIP_LOCAL_BIELIK=1 make up`.
 | Claude Code / Codex | Wiring overlays, model overrides, ccproxy hooks | Installed by you, reversible |
 | Token optimization | Claude-aware compression, request sanitization, tool-call recovery | In the LiteLLM runtime |
 | Observability | Prometheus + provisioned Grafana dashboard | `make observability` |
+| Lustro research A2A | Authenticated durable task ledger and bounded research worker | Disabled `research` profile |
 
 ## Commands
 
@@ -142,6 +143,7 @@ run, use `NEXGATE_SKIP_LOCAL_BIELIK=1 make up`.
 | `make configure` | Create an ignored operator `.env` with generated local credentials. |
 | `make up` / `make down` | Render configured routes; start/stop LiteLLM, Postgres, Redis. |
 | `make observability` | Start with Prometheus and Grafana dashboards. |
+| `docker compose --profile research up -d research-agent` | Start the private research service after its dedicated token, model key, and archive are configured. |
 | `bin/nexgate install <project>` | Wire Claude Code + Codex to the gateway. |
 | `bin/nexgate restore` | Remove that wiring, reversibly. |
 | `make configure-demo` / `make demo` / `make demo-smoke` | Account-free loopback mock and its smoke test. |
