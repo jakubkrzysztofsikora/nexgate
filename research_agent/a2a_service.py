@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import os
 import secrets
+from urllib.parse import quote_plus
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
@@ -394,16 +395,44 @@ def create_app(
     return app
 
 
+def database_url_from_environment(environment: Mapping[str, str]) -> str | None:
+    """Resolve the async database URL from A2A_DATABASE_URL or discrete parts.
+
+    Compose interpolation cannot see env_file values, so the research profile
+    passes the password through env_file and this builder quotes it safely.
+    """
+    url = environment.get("A2A_DATABASE_URL", "").strip()
+    if url and "replace-with" not in url:
+        return url
+    user = environment.get("A2A_DB_USER", "").strip()
+    password = environment.get("A2A_DB_PASSWORD", "") or environment.get("POSTGRES_PASSWORD", "")
+    host = environment.get("A2A_DB_HOST", "").strip() or "db"
+    port = environment.get("A2A_DB_PORT", "").strip() or "5432"
+    name = environment.get("A2A_DB_NAME", "").strip() or "nexgate"
+    if not user or not password:
+        return None
+    return (
+        f"postgresql+asyncpg://{quote_plus(user)}:{quote_plus(password)}"
+        f"@{host}:{port}/{quote_plus(name)}"
+    )
+
+
 def validate_runtime_configuration(environment: Mapping[str, str]) -> None:
     required = (
-        "A2A_DATABASE_URL", "LUSTRO_A2A_BEARER_TOKEN", "RESEARCH_ARCHIVE_BUCKET",
+        "LUSTRO_A2A_BEARER_TOKEN", "RESEARCH_ARCHIVE_BUCKET",
         "RESEARCH_ARCHIVE_ENDPOINT_URL", "LITELLM_API_KEY", "TAVILY_API_KEY",
     )
     for name in required:
         value = environment.get(name, "").strip()
         if not value or "replace-with" in value:
             raise RuntimeError(f"{name} must be configured before research-agent startup")
-    if not environment["A2A_DATABASE_URL"].startswith("postgresql+asyncpg://"):
+    database_url = database_url_from_environment(environment)
+    if not database_url:
+        raise RuntimeError(
+            "A2A_DATABASE_URL or A2A_DB_USER/A2A_DB_PASSWORD must be configured "
+            "before research-agent startup"
+        )
+    if not database_url.startswith("postgresql+asyncpg://"):
         raise RuntimeError("A2A_DATABASE_URL must use postgresql+asyncpg")
     if not environment["RESEARCH_ARCHIVE_ENDPOINT_URL"].startswith("https://"):
         raise RuntimeError("RESEARCH_ARCHIVE_ENDPOINT_URL must use HTTPS")
@@ -412,7 +441,9 @@ def validate_runtime_configuration(environment: Mapping[str, str]) -> None:
 def app_from_env() -> FastAPI:
     """Uvicorn factory for the opt-in private research service container."""
     validate_runtime_configuration(os.environ)
-    database_url = os.environ["A2A_DATABASE_URL"]
+    database_url = database_url_from_environment(os.environ)
+    if database_url is None:
+        raise RuntimeError("A2A database configuration is missing")
     bearer_token = os.environ["LUSTRO_A2A_BEARER_TOKEN"]
     archive_bucket = os.environ["RESEARCH_ARCHIVE_BUCKET"]
     store = SQLAlchemyA2ATaskStore.from_url(database_url)

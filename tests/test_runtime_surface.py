@@ -51,7 +51,9 @@ def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
     service = compose["services"]["research-agent"]
     assert service["profiles"] == ["research"]
     assert not service.get("ports")
-    assert service["environment"]["A2A_DATABASE_URL"].startswith("postgresql+asyncpg://")
+    assert service["environment"]["A2A_DB_HOST"] == "db"
+    assert service["environment"]["A2A_DB_USER"]
+    assert service["environment"]["RESEARCH_ARCHIVE_ENDPOINT_URL"]
     assert service["environment"]["LUSTRO_A2A_BEARER_TOKEN"]
     assert service["environment"]["TAVILY_API_KEY"]
     dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()

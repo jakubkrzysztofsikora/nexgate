@@ -61,12 +61,17 @@ services:
       dockerfile: runtime/Dockerfile.research-agent
     env_file: ${NEXGATE_ENV_FILE:-.env.nexgate.example}
     environment:
-      A2A_DATABASE_URL: postgresql+asyncpg://nexgate:${POSTGRES_PASSWORD}@db:5432/nexgate
+      # The app builds the async DSN from discrete parts: compose cannot
+      # interpolate env_file values, so the password arrives via env_file
+      # (POSTGRES_PASSWORD) and is quoted inside database_url_from_environment.
+      A2A_DB_USER: ${A2A_DB_USER:-nexgate}
+      A2A_DB_HOST: db
+      A2A_DB_NAME: ${A2A_DB_NAME:-nexgate}
       LUSTRO_A2A_BEARER_TOKEN: ${LUSTRO_A2A_BEARER_TOKEN}
       LITELLM_BASE_URL: http://litellm:4000/v1
       LITELLM_API_KEY: ${RESEARCH_LITELLM_API_KEY}
       RESEARCH_ARCHIVE_BUCKET: ${RESEARCH_ARCHIVE_BUCKET}
-      RESEARCH_ARCHIVE_ENDPOINT_URL: ${RESEARCH_ARCHIVE_ENDPOINT_URL:-}
+      RESEARCH_ARCHIVE_ENDPOINT_URL: ${RESEARCH_ARCHIVE_ENDPOINT_URL:?set RESEARCH_ARCHIVE_ENDPOINT_URL}
       TAVILY_API_KEY: ${TAVILY_API_KEY}
     depends_on:
       db:

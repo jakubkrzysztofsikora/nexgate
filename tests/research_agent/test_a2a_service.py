@@ -851,3 +851,35 @@ def test_runtime_configuration_fails_closed_before_startup():
         broken = valid | {key: "replace-with-placeholder"}
         with pytest.raises(RuntimeError, match=key):
             validate_runtime_configuration(broken)
+
+
+def test_database_url_builder_quotes_discrete_credentials():
+    from research_agent.a2a_service import database_url_from_environment
+
+    url = database_url_from_environment(
+        {
+            "A2A_DB_USER": "svc@ops",
+            "A2A_DB_PASSWORD": "p@ss:word/1",
+            "A2A_DB_HOST": "db",
+            "A2A_DB_NAME": "nexgate",
+        }
+    )
+    assert url == "postgresql+asyncpg://svc%40ops:p%40ss%3Aword%2F1@db:5432/nexgate"
+    assert database_url_from_environment({}) is None
+    assert (
+        database_url_from_environment({"A2A_DATABASE_URL": "postgresql+asyncpg://x@y/z"})
+        == "postgresql+asyncpg://x@y/z"
+    )
+
+
+def test_runtime_configuration_accepts_discrete_database_parts():
+    valid = {
+        "A2A_DB_USER": "service",
+        "A2A_DB_PASSWORD": "secret",
+        "LUSTRO_A2A_BEARER_TOKEN": "dedicated-inbound-token",
+        "RESEARCH_ARCHIVE_BUCKET": "private-research",
+        "RESEARCH_ARCHIVE_ENDPOINT_URL": "https://s3.internal.example",
+        "LITELLM_API_KEY": "dedicated-model-key",
+        "TAVILY_API_KEY": "dedicated-search-key",
+    }
+    validate_runtime_configuration(valid)

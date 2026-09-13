@@ -41,7 +41,7 @@ async def post_json(url, payload, api_key, policy):
                     'Authorization': 'Bearer ' + api_key, 'Accept-Encoding': 'identity'}) as response:
                     if response.status_code in {401, 403}:
                         raise AdapterError('credentials rejected')
-                    if response.status_code in {429, 432, 433}:
+                    if response.status_code in {429, 503, 529}:
                         raise AdapterError('quota or rate limit exceeded')
                     if response.status_code != 200:
                         raise AdapterError('upstream HTTP failure')
