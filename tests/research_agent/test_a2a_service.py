@@ -202,6 +202,36 @@ def test_worker_retries_transient_claim_failure_and_restores_health(tmp_path):
     run(scenario())
 
 
+def test_execute_propagates_cancellation_so_worker_shutdown_completes(tmp_path):
+    async def scenario():
+        store, service, _ = await make_service(tmp_path)
+        envelope, _ = submission()
+        task = await service.submit(envelope.request.request_id, envelope)
+        research_started = asyncio.Event()
+
+        async def research(*_args):
+            research_started.set()
+            await asyncio.sleep(60)
+
+        execution = asyncio.create_task(service.execute(task.id, research))
+        try:
+            async with asyncio.timeout(2):
+                await research_started.wait()
+            execution.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await execution
+            # Cancellation must leave the run unacknowledged (working) for
+            # lease-expiry reconciliation, never failed and never completed.
+            assert (await service.get(task.id)).state == "working"
+        finally:
+            if not execution.done():
+                execution.cancel()
+                await asyncio.gather(execution, return_exceptions=True)
+            await store.dispose()
+
+    run(scenario())
+
+
 def test_duplicate_message_id_with_different_commitment_is_rejected(tmp_path):
     async def scenario():
         store, service, enqueued = await make_service(tmp_path)

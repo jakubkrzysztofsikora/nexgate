@@ -173,8 +173,13 @@ class DurableA2AService:
             task = await self.store.complete(task_id, self.owner_id, run_id, result.model_dump(mode="json"))
         except (LeaseLost, _RunStopped):
             task = await self.store.acknowledge_cancellation(task_id, self.owner_id, run_id)
-        except (asyncio.CancelledError, TimeoutError):
-            # Cancellation of an await does not stop a to_thread provider call.
+        except asyncio.CancelledError:
+            # Cancellation interrupts an await but not a to_thread provider
+            # call. Leave the run unacknowledged for lease-expiry
+            # reconciliation, and propagate so worker shutdown and the runtime
+            # lifespan can complete.
+            raise
+        except TimeoutError:
             # Leave this run unacknowledged for lease-expiry reconciliation.
             task = await self.store.get(task_id)
         except Exception:
