@@ -13,7 +13,10 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Testing",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+research = [
     "a2a-sdk==1.1.2",
     "asyncpg==0.31.0",
     "boto3==1.40.62",

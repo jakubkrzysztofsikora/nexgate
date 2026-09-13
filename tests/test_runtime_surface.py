@@ -174,3 +174,24 @@ def test_render_prunes_fallback_hops_for_unconfigured_models() -> None:
 
     assert router["default_fallbacks"] == ["kept"]
     assert router["fallbacks"] == [{"kept": ["kept", "alias"]}, {"*": []}]
+
+
+def test_research_dependencies_are_an_optional_extra() -> None:
+    """Research-only runtime deps must not leak into the base install."""
+    import tomllib
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    project = pyproject["project"]
+    extra = project.get("optional-dependencies", {}).get("research", [])
+    assert project["dependencies"] == []
+    for pinned in (
+        "a2a-sdk==1.1.2",
+        "boto3==1.40.62",
+        "asyncpg==0.31.0",
+        "sqlalchemy==2.0.51",
+    ):
+        assert pinned in extra, pinned
+    dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()
+    assert "--extra research" in dockerfile
+    validate = (ROOT / ".github/workflows/validate.yml").read_text()
+    assert "--extra research" in validate
