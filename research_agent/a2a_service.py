@@ -114,6 +114,7 @@ class DurableA2AService:
         self.owner_id = owner_id or str(uuid4())
         self.lease_seconds = lease_seconds
         self._executions: dict[UUID, asyncio.Task] = {}
+        self.worker_healthy = True
 
     async def submit(
         self, message_id: UUID, submission: LustroResearchSubmission
@@ -124,7 +125,9 @@ class DurableA2AService:
         payload = submission.model_dump(mode="json")
         commitment = hashlib.sha256(canonical_bytes(submission)).hexdigest()
         task, created = await self.store.reserve(message_id, payload, commitment)
-        if created:
+        # Reservation is durable but the local queue is not. A resend must
+        # recover a submitted reservation if the original queue handoff failed.
+        if task.state == "submitted":
             await self.enqueue(task.id)
         return _snapshot(task)
 
@@ -207,6 +210,30 @@ class DurableA2AService:
                 return
 
 
+async def run_worker(
+    service: DurableA2AService,
+    queue: asyncio.Queue[UUID],
+    research: ResearchExecutor,
+    *,
+    retry_delay: float = 0.1,
+) -> None:
+    """Keep a transient store failure from silently killing the sole worker."""
+    service.worker_healthy = True
+    while True:
+        task_id = await queue.get()
+        try:
+            await service.execute(task_id, research)
+            service.worker_healthy = True
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            service.worker_healthy = False
+            await asyncio.sleep(retry_delay)
+            await queue.put(task_id)
+        finally:
+            queue.task_done()
+
+
 def _a2a_task(snapshot: TaskSnapshot) -> dict[str, Any]:
     states = {
         "submitted": "TASK_STATE_SUBMITTED",
@@ -268,6 +295,8 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:
+        if not service.worker_healthy:
+            raise HTTPException(status_code=503, detail="research worker unavailable")
         return {"status": "ok"}
 
     @app.get("/.well-known/agent-card.json", dependencies=[Depends(authenticate)])
@@ -414,18 +443,10 @@ def app_from_env() -> FastAPI:
             checkpoint,
         )
 
-    async def worker() -> None:
-        while True:
-            task_id = await queue.get()
-            try:
-                await service.execute(task_id, configured_research)
-            finally:
-                queue.task_done()
-
     @asynccontextmanager
     async def runtime_lifespan(_app: FastAPI):
         await store.assert_schema_ready()
-        worker_task = asyncio.create_task(worker())
+        worker_task = asyncio.create_task(run_worker(service, queue, configured_research))
         await service.recover_pending()
         try:
             yield

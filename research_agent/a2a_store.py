@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import re
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -101,6 +102,60 @@ class SQLAlchemyA2ATaskStore:
             checks = {row.get("name") for row in schema.get_check_constraints(tasks.name)}
             if "research_a2a_tasks_state_check" not in checks:
                 raise RuntimeError("research A2A state constraint missing")
+            if connection.dialect.name != "postgresql":
+                return
+
+            rows = connection.exec_driver_sql(
+                """
+                SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS type_name,
+                       a.attnotnull, COALESCE(pg_get_expr(d.adbin, d.adrelid), '') AS default_expr
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                WHERE a.attrelid = 'research_a2a_tasks'::regclass
+                  AND a.attnum > 0 AND NOT a.attisdropped
+                """
+            ).mappings()
+            expected = {
+                "id": ("text", True, ""),
+                "message_id": ("text", True, ""),
+                "submission": ("jsonb", True, ""),
+                "submission_commitment": ("character(64)", True, ""),
+                "state": ("text", True, ""),
+                "cancel_requested": ("boolean", True, "false"),
+                "artifact": ("jsonb", False, ""),
+                "error": ("character varying(500)", False, ""),
+                "run_count": ("integer", True, "0"),
+                "run_id": ("text", False, ""),
+                "lease_owner": ("character varying(200)", False, ""),
+                "lease_expires_at": ("timestamp with time zone", False, ""),
+                "created_at": ("timestamp with time zone", True, ""),
+                "updated_at": ("timestamp with time zone", True, ""),
+            }
+
+            def normalized(value: str) -> str:
+                return re.sub(r"[\s()]", "", value).replace("::boolean", "")
+
+            actual = {
+                row["attname"]: (row["type_name"], row["attnotnull"], normalized(row["default_expr"]))
+                for row in rows
+            }
+            if actual != expected:
+                raise RuntimeError("research A2A schema contract mismatch")
+            primary_key = set(schema.get_pk_constraint(tasks.name).get("constrained_columns") or ())
+            if primary_key != {"id"}:
+                raise RuntimeError("research A2A schema contract mismatch")
+            state_check = connection.exec_driver_sql(
+                """
+                SELECT convalidated, pg_get_constraintdef(oid) AS definition
+                FROM pg_constraint
+                WHERE conrelid = 'research_a2a_tasks'::regclass
+                  AND conname = 'research_a2a_tasks_state_check' AND contype = 'c'
+                """
+            ).mappings().one_or_none()
+            expected_check = "CHECKstate=ANYARRAY['submitted','working','completed','failed','canceled']"
+            definition = "" if state_check is None else normalized(state_check["definition"]).replace("::text", "")
+            if state_check is None or not state_check["convalidated"] or definition != expected_check:
+                raise RuntimeError("research A2A state constraint invalid")
 
         async with self.engine.connect() as connection:
             await connection.run_sync(check)

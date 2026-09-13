@@ -75,7 +75,10 @@ The A2A `messageId` must equal the request ID.
 
 Before any research work is queued, PostgreSQL inserts a task row with a unique
 `message_id`. Concurrent sends and retries after a lost acknowledgement read
-that row and do not queue another run. `GetTask` returns durable state;
+that row. They may issue redundant in-memory wakeups, but PostgreSQL claims
+the row exactly once, so they do not queue another run. If the first local
+handoff fails after reservation, a duplicate resend wakes the submitted task
+without requiring a restart. `GetTask` returns durable state;
 `CancelTask` changes only submitted or working tasks. Completed tasks expose
 one `ResearchRun` artifact and never echo the trusted submission envelope.
 Submitted tasks are recovered when the service starts. Working tasks carry a
@@ -116,9 +119,13 @@ docker compose --profile research up -d research-agent
 ```
 
 Startup runs a schema preflight only; it never creates or mutates tables. The
-migration is additive and safe to reapply. Startup also rejects missing or
-placeholder database, inbound bearer, Tavily, dedicated LiteLLM virtual-key,
-archive bucket, or HTTPS archive-endpoint configuration before a worker starts.
+migration is additive and safe to reapply. On PostgreSQL, preflight rejects
+wrong column types, nullability, defaults, primary/unique keys, or state-check
+semantics rather than attempting an unsafe legacy cast. Startup also rejects
+missing or placeholder database, inbound bearer, Tavily, dedicated LiteLLM
+virtual-key, archive bucket, or HTTPS archive-endpoint configuration before a
+worker starts. A transient worker/store failure is retried against the durable
+task row; `/healthz` returns 503 until that worker successfully resumes.
 
 Starting the container is not authorization to enable Lustro publication or to
 run paid research. Cross-repository container, custody, migration, and disabled

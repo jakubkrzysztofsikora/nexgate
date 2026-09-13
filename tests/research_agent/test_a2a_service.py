@@ -10,6 +10,7 @@ from research_agent.a2a_service import (
     DurableA2AService,
     LustroResearchSubmission,
     create_app,
+    run_worker,
     validate_runtime_configuration,
 )
 from research_agent.a2a_store import SQLAlchemyA2ATaskStore, SubmissionConflict, metadata, tasks
@@ -84,7 +85,7 @@ def test_duplicate_message_id_returns_one_task_and_one_research_run(tmp_path):
             service.submit(envelope.request.request_id, envelope),
         )
         assert second.id == first.id
-        assert enqueued == [first.id]
+        assert enqueued == [first.id, first.id]
 
         calls = 0
 
@@ -104,7 +105,7 @@ def test_duplicate_message_id_returns_one_task_and_one_research_run(tmp_path):
         assert duplicate.artifacts == completed.artifacts
         assert calls == 1
         assert await store.run_count(first.id) == 1
-        assert enqueued == [first.id]
+        assert enqueued == [first.id, first.id]
         await store.dispose()
 
     run(scenario())
@@ -117,8 +118,81 @@ def test_acknowledgement_loss_resend_returns_the_reserved_task(tmp_path):
         accepted = await service.submit(envelope.request.request_id, envelope)
         recovered = await service.submit(envelope.request.request_id, envelope)
         assert recovered == accepted
-        assert enqueued == [accepted.id]
+        assert enqueued == [accepted.id, accepted.id]
         await store.dispose()
+
+    run(scenario())
+
+
+def test_resend_requeues_a_durably_reserved_task_after_enqueue_failure(tmp_path):
+    async def scenario():
+        store = SQLAlchemyA2ATaskStore.from_url(
+            f"sqlite+aiosqlite:///{tmp_path / 'tasks.sqlite3'}"
+        )
+        async with store.engine.begin() as connection:
+            await connection.run_sync(metadata.create_all)
+        enqueued = []
+        attempts = 0
+
+        async def enqueue(task_id):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("queue temporarily unavailable")
+            enqueued.append(task_id)
+
+        service = DurableA2AService(store, enqueue=enqueue)
+        envelope, _ = submission()
+        with pytest.raises(RuntimeError, match="queue temporarily unavailable"):
+            await service.submit(envelope.request.request_id, envelope)
+        accepted = await service.submit(envelope.request.request_id, envelope)
+        assert accepted.state == "submitted"
+        assert enqueued == [accepted.id]
+        assert await store.run_count(accepted.id) == 0
+        await store.dispose()
+
+    run(scenario())
+
+
+def test_worker_retries_transient_claim_failure_and_restores_health(tmp_path):
+    async def scenario():
+        store, service, _ = await make_service(tmp_path)
+        envelope, result = submission()
+        task = await service.submit(envelope.request.request_id, envelope)
+        queue = asyncio.Queue()
+        await queue.put(task.id)
+        original_claim = store.claim
+        attempts = 0
+
+        async def fail_once(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("database temporarily unavailable")
+            return await original_claim(*args, **kwargs)
+
+        store.claim = fail_once
+
+        async def research(*_args):
+            return result
+
+        worker = asyncio.create_task(run_worker(service, queue, research, retry_delay=0.1))
+        try:
+            async with asyncio.timeout(2):
+                while service.worker_healthy:
+                    await asyncio.sleep(0.01)
+            with TestClient(create_app(service, bearer_token="fixture")) as client:
+                assert client.get("/healthz").status_code == 503
+            async with asyncio.timeout(2):
+                while (await service.get(task.id)).state != "completed":
+                    await asyncio.sleep(0.01)
+            assert attempts == 2
+            assert service.worker_healthy
+            assert await store.run_count(task.id) == 1
+        finally:
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+            await store.dispose()
 
     run(scenario())
 
