@@ -73,6 +73,8 @@ services:
       RESEARCH_ARCHIVE_BUCKET: ${RESEARCH_ARCHIVE_BUCKET}
       RESEARCH_ARCHIVE_ENDPOINT_URL: ${RESEARCH_ARCHIVE_ENDPOINT_URL:?set RESEARCH_ARCHIVE_ENDPOINT_URL}
       TAVILY_API_KEY: ${TAVILY_API_KEY}
+    # Private service: reachable only on the tailnet bind host, never public.
+    ports: ["${LUSTRO_A2A_BIND_HOST:-100.116.31.6}:${LUSTRO_A2A_PORT:-9105}:9000"]
     depends_on:
       db:
         condition: service_healthy

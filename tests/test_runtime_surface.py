@@ -50,7 +50,13 @@ def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
     compose = yaml.safe_load((ROOT / "compose.nexgate.yaml").read_text())
     service = compose["services"]["research-agent"]
     assert service["profiles"] == ["research"]
-    assert not service.get("ports")
+    assert not service.get("ports") or all(
+        "0.0.0.0" not in port for port in service["ports"]
+    )
+    # Reachability: bound to the tailnet host only, never a public interface.
+    assert service["ports"] == [
+        "${LUSTRO_A2A_BIND_HOST:-100.116.31.6}:${LUSTRO_A2A_PORT:-9105}:9000"
+    ]
     assert service["environment"]["A2A_DB_HOST"] == "db"
     assert service["environment"]["A2A_DB_USER"]
     assert service["environment"]["RESEARCH_ARCHIVE_ENDPOINT_URL"]
