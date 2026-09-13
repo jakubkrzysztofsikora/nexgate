@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_litellm_image_pins_a2a_capable_versions() -> None:
     dockerfile = (ROOT / "runtime/Dockerfile.litellm").read_text()
+    assert "FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e" in dockerfile
     assert "ARG LITELLM_VERSION=1.100.1" in dockerfile
     assert '"a2a-sdk==1.1.2"' in dockerfile
 
@@ -54,6 +55,7 @@ def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
     assert service["environment"]["LUSTRO_A2A_BEARER_TOKEN"]
     assert service["environment"]["TAVILY_API_KEY"]
     dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()
+    assert "FROM python:3.13-slim-bookworm@sha256:ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e" in dockerfile
     assert "uv sync --frozen --no-dev" in dockerfile
     assert "research_agent.a2a_service:app_from_env" in dockerfile
     assert "a2a-sdk==1.1.2" in (ROOT / "pyproject.toml").read_text()

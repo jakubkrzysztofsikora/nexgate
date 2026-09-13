@@ -187,6 +187,11 @@ def test_worker_retries_transient_claim_failure_and_restores_health(tmp_path):
                 while (await service.get(task.id)).state != "completed":
                     await asyncio.sleep(0.01)
             assert attempts == 2
+            # Completion is persisted by execute() before the worker's health
+            # flag is restored in the enclosing worker loop.
+            async with asyncio.timeout(2):
+                while not service.worker_healthy:
+                    await asyncio.sleep(0.01)
             assert service.worker_healthy
             assert await store.run_count(task.id) == 1
         finally:

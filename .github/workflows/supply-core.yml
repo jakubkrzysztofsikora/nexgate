@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          # The changed-file scope must be calculated against the event base.
+          fetch-depth: 0
 
       - name: Install supply-core
         run: |
@@ -36,9 +39,35 @@ jobs:
           "$bin" --version
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Materialize changed pinning scope
+        id: scope
+        run: |
+          set -euo pipefail
+          base="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            base="$(git rev-parse HEAD^)"
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          scope="$RUNNER_TEMP/supply-core-scope"
+          mkdir -p "$scope"
+          while IFS= read -r scan_file; do
+            case "$scan_file" in
+              .github/workflows/*|Dockerfile*|*/Dockerfile*|compose.yml|*/compose.yml|docker-compose*.yml|*/docker-compose*.yml)
+                mkdir -p "$scope/$(dirname "$scan_file")"
+                cp -- "$scan_file" "$scope/$scan_file"
+                ;;
+            esac
+          done < <(git diff --name-only --diff-filter=ACMR "$base" "$GITHUB_SHA")
+          echo "path=$scope" >> "$GITHUB_OUTPUT"
+
       - name: Scan workflow pinning
-        run: supply-core scan-actions . --annotations
+        run: supply-core scan-actions "${{ steps.scope.outputs.path }}" --annotations
 
       - name: Scan container image pinning
         if: always()
-        run: supply-core scan-docker .
+        run: supply-core scan-docker "${{ steps.scope.outputs.path }}"
