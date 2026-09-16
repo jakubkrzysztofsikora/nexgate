@@ -666,7 +666,55 @@ router_settings:
     - mistral/glm-5.2
     - minimax-m3
     - mistral
+  - qwen36-modal:
+    - qwen36-kaggle
+    - llm-422-sink
+  - qwen36-kaggle:
+    - llm-422-sink
+  - llm-422-sink: []
 model_list:
+# --- free-GPU tier: Modal L40S -> Kaggle T4x2 (CF tunnel) -> 429 sink (added 2026-09-16) ---
+- model_name: qwen36-modal
+  litellm_params:
+    model: openai/Qwen/Qwen3.6-35B-A3B-FP8
+    api_base: https://jakubkrzysztofsikora--qwen36-coder-vllm-serve.modal.run/v1
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 5
+  model_info:
+    context_window: 65536
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: qwen36-kaggle
+  litellm_params:
+    model: openai/qwen36-kaggle
+    api_base: https://qwen36-kaggle.jakub.team/v1
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 8192
+    timeout: 60
+    num_retries: 1
+  model_info:
+    context_window: 32768
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: llm-422-sink
+  litellm_params:
+    model: openai/exhausted
+    api_base: http://host.docker.internal:8799/v1
+    api_key: sk-noop
+    timeout: 5
+    num_retries: 0
+  model_info:
+    context_window: 1024
+    disable_background_health_check: true
+    disable_fallbacks: true
 - model_name: qwencloud/qwen3.8-max
   litellm_params:
     model: openai/qwen3.8-max
