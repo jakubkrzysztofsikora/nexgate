@@ -158,12 +158,14 @@ class SpendLogArchiver:
     # ---- deletion ---------------------------------------------------------
     def delete_day(self, day: str) -> None:
         d0, d1 = self.window(day)
-        self.psql(
-            f"DELETE FROM \"{TOOL_INDEX_TABLE}\" WHERE request_id IN ("
-            f"SELECT request_id FROM \"{SPEND_TABLE}\" "
-            f"WHERE \"startTime\" >= TIMESTAMP '{d0}' AND \"startTime\" < TIMESTAMP '{d1}');",
-            check=False,
-        )
+        try:
+            self.psql(
+                f"DELETE FROM \"{TOOL_INDEX_TABLE}\" WHERE request_id IN ("
+                f"SELECT request_id FROM \"{SPEND_TABLE}\" "
+                f"WHERE \"startTime\" >= TIMESTAMP '{d0}' AND \"startTime\" < TIMESTAMP '{d1}');"
+            )
+        except Exception as exc:  # non-fatal: the index is derived data
+            log(f"warning: tool-index cleanup skipped for {day}: {exc}")
         self.psql(
             f"DELETE FROM \"{SPEND_TABLE}\" "
             f"WHERE \"startTime\" >= TIMESTAMP '{d0}' AND \"startTime\" < TIMESTAMP '{d1}';"
