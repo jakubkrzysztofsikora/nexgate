@@ -80,9 +80,11 @@ def test_proxy_uses_rendered_cache_and_callback_settings(real_proxy):
     assert config["litellm_settings"].get("cache") is True
     assert config["litellm_settings"]["cache_params"]["type"] == "redis"
     assert config["litellm_settings"]["store_audit_logs"] is True
-    assert config["general_settings"]["store_prompts_in_spend_logs"] is True
+    assert config["general_settings"]["store_prompts_in_spend_logs"] is False
     assert {"prometheus", "claude_aware_compression.claude_aware_compression",
-            "ccproxy_callback.ccproxy_handler"} <= set(config["litellm_settings"]["callbacks"])
+            "ccproxy_callback.ccproxy_handler", "s3_v2"} <= set(config["litellm_settings"]["callbacks"])
+    s3_params = config["litellm_settings"].get("s3_callback_params") or {}
+    assert s3_params.get("s3_bucket_name"), "s3_v2 callback must carry bucket config"
     assert docker("exec", real_proxy.redis, "redis-cli", "PING") == "PONG"
 
 

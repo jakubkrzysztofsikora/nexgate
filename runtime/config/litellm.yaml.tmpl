@@ -12,6 +12,8 @@ router_settings:
   - mistral
   model_group_alias:
     opus[1m]: claude-opus-4-8[1m]
+    mistral/zai-glm-5-3: mistral/glm-5.3
+    mistral/zai-glm-5-3-flash: mistral/glm-5.3-flash
     gemma-2: gemma
     gemma2: gemma
     gemma-7b: gemma
@@ -62,6 +64,8 @@ router_settings:
     google/gemma-4-26b: scaleway/gemma-4
     google/gemma-4-26b-it: scaleway/gemma-4
     google/gemma-4-26b-a4b-it: scaleway/gemma-4
+    opencode/deepseek-v4.1-flash: opencode/deepseek-v4-flash
+    deepseek-v4.1-flash: opencode/deepseek-v4-flash
   context_window_fallbacks:
   - bielik: []
   - psyllm-4b: []
@@ -1341,6 +1345,234 @@ model_list:
     supports_tool_choice: true
     supports_parallel_function_calling: true
     disable_background_health_check: true
+- model_name: greenpt/green-l
+  litellm_params:
+    model: openai/green-l
+    api_base: os.environ/NEXGATE_GREENPT_GREEN_L_API_BASE
+    api_key: os.environ/GREENPT_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 128000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: greenpt/green-r
+  litellm_params:
+    model: openai/green-r
+    api_base: os.environ/NEXGATE_GREENPT_GREEN_R_API_BASE
+    api_key: os.environ/GREENPT_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: greenpt/glm-5.2
+  litellm_params:
+    model: openai/glm-5.2
+    api_base: os.environ/NEXGATE_GREENPT_GLM_5_2_API_BASE
+    api_key: os.environ/GREENPT_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: greenpt/kimi-k2.7-code
+  litellm_params:
+    model: openai/kimi-k2.7-code
+    api_base: os.environ/NEXGATE_GREENPT_KIMI_K2_7_CODE_API_BASE
+    api_key: os.environ/GREENPT_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: greenpt/gpt-oss-120b
+  litellm_params:
+    model: openai/gpt-oss-120b
+    api_base: os.environ/NEXGATE_GREENPT_GPT_OSS_120B_API_BASE
+    api_key: os.environ/GREENPT_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/kimi-k3
+  litellm_params:
+    model: openai/moonshotai/kimi-k3
+    api_base: os.environ/NEXGATE_NVIDIA_KIMI_K3_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/gpt-oss-20b
+  litellm_params:
+    model: openai/openai/gpt-oss-20b
+    api_base: os.environ/NEXGATE_NVIDIA_GPT_OSS_20B_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/minimax-m3
+  litellm_params:
+    model: openai/minimaxai/minimax-m3
+    api_base: os.environ/NEXGATE_NVIDIA_MINIMAX_M3_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 204800
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/nemotron-3-super-120b
+  litellm_params:
+    model: openai/nvidia/nemotron-3-super-120b-a12b
+    api_base: os.environ/NEXGATE_NVIDIA_NEMOTRON_3_SUPER_120B_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/nemotron-3-ultra-550b
+  litellm_params:
+    model: openai/nvidia/nemotron-3-ultra-550b-a55b
+    api_base: os.environ/NEXGATE_NVIDIA_NEMOTRON_3_ULTRA_550B_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/nemotron-3.5-lightning
+  litellm_params:
+    model: openai/nvidia/nemotron-3.5-lightning-30b-a3b
+    api_base: os.environ/NEXGATE_NVIDIA_NEMOTRON_3_5_LIGHTNING_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 131072
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: nvidia/deepseek-v4-pro
+  litellm_params:
+    model: openai/deepseek-ai/deepseek-v4-pro-0813
+    api_base: os.environ/NEXGATE_NVIDIA_DEEPSEEK_V4_PRO_API_BASE
+    api_key: os.environ/NVIDIA_API_KEY
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 2
+    drop_params: true
+    additional_drop_params:
+    - web_search_options
+    - output_config
+    - max_completion_tokens
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
 - model_name: claude-opus-4-8[1m]
   litellm_params:
     model: anthropic/claude-opus-4-8
@@ -2141,6 +2373,50 @@ model_list:
     allowed_openai_params:
     - tools
     - tool_choice
+    max_tokens: 131072
+    timeout: 60
+    num_retries: 2
+    region_name: eu
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: mistral/glm-5.3
+  litellm_params:
+    model: mistral/zai-glm-5-3
+    api_key: os.environ/MISTRAL_API_KEY
+    drop_params: true
+    additional_drop_params:
+    - output_config
+    - web_search_options
+    - max_completion_tokens
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    max_tokens: 128000
+    timeout: 60
+    num_retries: 2
+    region_name: eu
+  model_info:
+    context_window: 1000000
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: mistral/glm-5.3-flash
+  litellm_params:
+    model: mistral/zai-glm-5-3-flash
+    api_key: os.environ/MISTRAL_API_KEY
+    drop_params: true
+    additional_drop_params:
+    - output_config
+    - web_search_options
+    - max_completion_tokens
+    allowed_openai_params:
+    - tools
+    - tool_choice
     max_tokens: 128000
     timeout: 60
     num_retries: 2
@@ -2176,15 +2452,14 @@ model_list:
     model: openai/deepseek-v4-flash
     api_base: os.environ/NEXGATE_OPENCODE_API_BASE
     api_key: os.environ/OPENCODE_API_KEY
-    parse_tool_call_from_content: true
     drop_params: true
     allowed_openai_params:
     - tools
     - tool_choice
     - parallel_tool_calls
-    extra_body:
-      thinking:
-        type: disabled
+    extra_headers:
+      x-opencode-session: "nexgate-session"
+      User-Agent: "opencode/1.18.15"
     max_tokens: 32768
     timeout: 60
     num_retries: 2
@@ -2199,15 +2474,14 @@ model_list:
     model: openai/deepseek-v4-pro
     api_base: os.environ/NEXGATE_OPENCODE_API_BASE
     api_key: os.environ/OPENCODE_API_KEY
-    parse_tool_call_from_content: true
     drop_params: true
     allowed_openai_params:
     - tools
     - tool_choice
     - parallel_tool_calls
-    extra_body:
-      thinking:
-        type: disabled
+    extra_headers:
+      x-opencode-session: "nexgate-session"
+      User-Agent: "opencode/1.18.15"
     max_tokens: 32768
     timeout: 60
     num_retries: 2
@@ -3046,10 +3320,24 @@ litellm_settings:
   - prometheus
   - claude_aware_compression.claude_aware_compression
   - ccproxy_callback.ccproxy_handler
+  - s3_v2
+  s3_callback_params:
+    s3_bucket_name: os.environ/SPEND_ARCHIVE_BUCKET
+    s3_region_name: fr-par
+    s3_endpoint_url: os.environ/SPEND_ARCHIVE_ENDPOINT_URL
+    s3_aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+    s3_aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+    s3_path: litellm-live
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
   database_connection_pool_limit: 10
   store_model_in_db: false
-  store_prompts_in_spend_logs: true
+  store_prompts_in_spend_logs: false
   ui_access_mode: username_password
+mcp_servers:
+  runpod:
+    url: "https://mcp.getrunpod.io/"
+    transport: "http"
+    auth_type: "oauth2"
+    oauth2_flow: "authorization_code"
