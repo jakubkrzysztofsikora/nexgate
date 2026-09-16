@@ -197,6 +197,8 @@ class SpendLogArchiver:
             return 0
         if not days:
             log("nothing to archive")
+            if self.args.vacuum_full:
+                self.vacuum(full=True)
             return 0
 
         started = time.monotonic()
