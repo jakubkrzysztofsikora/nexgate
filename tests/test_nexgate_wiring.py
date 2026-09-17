@@ -104,6 +104,24 @@ class TestClaudeCodeWiring:
         assert mcp_env["NEXGATE_PROBE_URL"] == "http://127.0.0.1:4999/v1/messages"
         assert mcp_env["LITELLM_MASTER_KEY"] == "sk-test-master-key"
 
+    def test_restore_without_backup_removes_mcp_block_and_key(self, sandbox) -> None:
+        """A first install on an already-wired file has no pre-nexgate
+        snapshot; restore must still remove the MCP status server block,
+        otherwise its env would carry LITELLM_MASTER_KEY after uninstall."""
+        _home, _repo, project = sandbox
+        result = run_bash_installer(project, "install")
+        assert result.returncode == 0, result.stderr
+        for name in ("settings.local.json.nexgate-backup", "settings.local.json.pre-nexgate"):
+            backup = project / ".claude" / name
+            if backup.exists():
+                backup.unlink()
+        result = run_bash_installer(project, "restore")
+        assert result.returncode == 0, result.stderr
+        settings_path = project / ".claude/settings.local.json"
+        settings = json.loads(settings_path.read_text())
+        assert "mcpServers" not in settings
+        assert "sk-test-master-key" not in settings_path.read_text()
+
 
 class TestCodexWiring:
     def test_codex_config_toml_gets_gateway_provider(self, sandbox) -> None:

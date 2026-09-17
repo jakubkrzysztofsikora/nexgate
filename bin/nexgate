@@ -551,7 +551,7 @@ cmd_restore() {
     local has_jq
     has_jq=$(command -v jq >/dev/null 2>&1 && echo yes || echo no)
     if [[ "$has_jq" == "yes" ]]; then
-      jq 'del(.env.ANTHROPIC_BASE_URL, .env.ANTHROPIC_CUSTOM_HEADERS, .env.ANTHROPIC_MODEL, .env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, .env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS, .env.ANTHROPIC_DEFAULT_OPUS_MODEL, .env.ANTHROPIC_DEFAULT_SONNET_MODEL, .env.ANTHROPIC_DEFAULT_HAIKU_MODEL) | del(.model) | del(.statusLine)' \
+      jq 'del(.env.ANTHROPIC_BASE_URL, .env.ANTHROPIC_CUSTOM_HEADERS, .env.ANTHROPIC_MODEL, .env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, .env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS, .env.ANTHROPIC_DEFAULT_OPUS_MODEL, .env.ANTHROPIC_DEFAULT_SONNET_MODEL, .env.ANTHROPIC_DEFAULT_HAIKU_MODEL) | del(.model) | del(.statusLine) | del(.mcpServers["nexgate-subscription-status"]) | if ((.mcpServers? // {}) | length) == 0 then del(.mcpServers) else . end' \
         "$SETTINGS_LOCAL" | safe_write_json "$SETTINGS_LOCAL"
       ok "Stripped nexgate env vars from settings.local.json"
     else
