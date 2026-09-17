@@ -678,10 +678,12 @@ router_settings:
     - llm-422-sink
 model_list:
 # --- free-GPU tier: Modal L40S -> Kaggle T4x2 (CF tunnel) -> 429 sink (added 2026-09-16) ---
+# Wire your own endpoints through the NEXGATE_*_API_BASE variables below; the
+# public catalog ships no endpoints.
 - model_name: qwen38-modal
   litellm_params:
     model: openai/orcarouter/Qwen3.8-27B-Uncensored
-    api_base: https://jakubkrzysztofsikora--qwen38-uncensored-vllm-serve.modal.run/v1
+    api_base: os.environ/NEXGATE_QWEN38_MODAL_API_BASE
     api_key: os.environ/NEXGATE_QWEN36_API_KEY
     drop_params: true
     max_tokens: 16384
@@ -697,7 +699,7 @@ model_list:
 - model_name: qwen36-modal
   litellm_params:
     model: openai/Qwen/Qwen3.6-35B-A3B-FP8
-    api_base: https://jakubkrzysztofsikora--qwen36-coder-vllm-serve.modal.run/v1
+    api_base: os.environ/NEXGATE_QWEN36_MODAL_API_BASE
     api_key: os.environ/NEXGATE_QWEN36_API_KEY
     drop_params: true
     max_tokens: 16384
@@ -712,7 +714,7 @@ model_list:
 - model_name: qwen36-kaggle
   litellm_params:
     model: openai/qwen36-kaggle
-    api_base: https://qwen36-kaggle.jakub.team/v1
+    api_base: os.environ/NEXGATE_QWEN36_KAGGLE_API_BASE
     api_key: os.environ/NEXGATE_QWEN36_API_KEY
     drop_params: true
     max_tokens: 8192
@@ -727,7 +729,7 @@ model_list:
 - model_name: llm-422-sink
   litellm_params:
     model: openai/exhausted
-    api_base: http://host.docker.internal:8799/v1
+    api_base: os.environ/NEXGATE_422_SINK_API_BASE
     api_key: sk-noop
     timeout: 5
     num_retries: 0
