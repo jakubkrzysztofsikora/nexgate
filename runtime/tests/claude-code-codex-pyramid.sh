@@ -24,7 +24,7 @@ fi
 # shellcheck disable=SC1091
 [[ -f .env ]] && { set -a; source .env; set +a; }
 
-BASE_URL="${ANTHROPIC_BASE_URL:-http://${LITELLM_HOST:-127.0.0.1}:${LITELLM_PORT:-4000}}"
+BASE_URL="${ANTHROPIC_BASE_URL:-${LITELLM_SCHEME:-http}://${LITELLM_HOST:-127.0.0.1}:${LITELLM_PORT:-4000}}"
 if ! curl -fsS --max-time 5 "${BASE_URL%/}/health/liveness" >/dev/null 2>&1; then
   if (( SKIP_IF_UNAVAILABLE )); then
     echo "SKIP: LiteLLM is not reachable at ${BASE_URL%/}"

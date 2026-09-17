@@ -56,9 +56,19 @@ class TestProbeTruthfulness:
         for group_name, group in module.PROVIDER_GROUPS.items():
             assert group["probe_model"] in group["models"], group_name
 
-    def test_probe_url_targets_local_gateway(self, script_name) -> None:
+    def test_probe_url_defaults_to_local_gateway(self, script_name, monkeypatch) -> None:
+        for key in ("NEXGATE_PROBE_URL", "LITELLM_SCHEME", "LITELLM_HOST", "LITELLM_PORT"):
+            monkeypatch.delenv(key, raising=False)
         module = _load_script(script_name)
-        assert "127.0.0.1" in module.PROBE_URL or "localhost" in module.PROBE_URL
+        assert module.PROBE_URL == "http://127.0.0.1:4000/v1/messages"
+
+    def test_probe_url_follows_configured_gateway(self, script_name, monkeypatch) -> None:
+        monkeypatch.delenv("NEXGATE_PROBE_URL", raising=False)
+        monkeypatch.setenv("LITELLM_SCHEME", "https")
+        monkeypatch.setenv("LITELLM_HOST", "gateway.example.ts.net")
+        monkeypatch.setenv("LITELLM_PORT", "443")
+        module = _load_script(script_name)
+        assert module.PROBE_URL == "https://gateway.example.ts.net/v1/messages"
 
     def test_payment_required_classifies_as_subscription_state(self, script_name) -> None:
         module = _load_script(script_name)

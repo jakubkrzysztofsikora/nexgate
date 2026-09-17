@@ -97,6 +97,12 @@ class TestClaudeCodeWiring:
         assert settings["model"] == "claude-fable-5-1"
         for key in ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"):
             assert env[key], key
+        # The MCP status server probes the wired gateway, so it needs both the
+        # resolved probe URL and the key (it cannot read the repo `.env` on a
+        # machine that only consumes the wired config).
+        mcp_env = settings["mcpServers"]["nexgate-subscription-status"]["env"]
+        assert mcp_env["NEXGATE_PROBE_URL"] == "http://127.0.0.1:4999/v1/messages"
+        assert mcp_env["LITELLM_MASTER_KEY"] == "sk-test-master-key"
 
 
 class TestCodexWiring:

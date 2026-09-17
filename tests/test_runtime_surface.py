@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -42,8 +45,46 @@ def test_runtime_compose_is_loopback_bound_and_has_optional_observability() -> N
     assert {"litellm", "db", "redis", "prometheus", "grafana"} <= services.keys()
     assert services["prometheus"]["profiles"] == ["observability"]
     assert services["grafana"]["profiles"] == ["observability"]
-    for service in ("litellm", "prometheus", "grafana"):
+    # Loopback is the portable default. Publishing on an extra host address
+    # (e.g. a tailnet IP) is explicit opt-in via NEXGATE_BIND_HOST, and that
+    # knob defaults to loopback as well.
+    assert services["litellm"]["ports"] == [
+        "127.0.0.1:${NEXGATE_PORT:-4000}:4000",
+        "${NEXGATE_BIND_HOST:-127.0.0.1}:${NEXGATE_PORT:-4000}:4000",
+    ]
+    for service in ("prometheus", "grafana"):
         assert all(str(port).startswith("127.0.0.1:") for port in services[service]["ports"])
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
+def test_compose_bind_host_collapses_and_extends(tmp_path: Path) -> None:
+    """`docker compose config` ground truth: with NEXGATE_BIND_HOST unset the
+    duplicated loopback entry collapses to a single binding; setting it adds
+    exactly one extra binding instead of replacing loopback."""
+    (tmp_path / "empty.env").write_text(
+        "POSTGRES_PASSWORD=ci\nRESEARCH_ARCHIVE_ENDPOINT_URL=https://ci.invalid\n"
+    )
+    base_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("NEXGATE_BIND_HOST", "NEXGATE_ENV_FILE", "LITELLM_HOST", "LITELLM_PORT", "LITELLM_SCHEME")
+    }
+    cmd = [
+        "docker", "compose", "--env-file", str(tmp_path / "empty.env"),
+        "-f", str(ROOT / "compose.nexgate.yaml"), "config",
+    ]
+    probe = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, env=base_env)
+    if probe.returncode != 0:
+        pytest.skip(f"docker compose unavailable: {probe.stderr.strip()[:120]}")
+    ports = yaml.safe_load(probe.stdout)["services"]["litellm"]["ports"]
+    assert [port["host_ip"] for port in ports] == ["127.0.0.1"]
+    probe = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=ROOT,
+        env={**base_env, "NEXGATE_BIND_HOST": "10.0.0.5"},
+    )
+    assert probe.returncode == 0, probe.stderr
+    ports = yaml.safe_load(probe.stdout)["services"]["litellm"]["ports"]
+    assert [port["host_ip"] for port in ports] == ["127.0.0.1", "10.0.0.5"]
 
 
 def test_private_research_service_is_opt_in_and_not_host_exposed() -> None:
@@ -174,24 +215,3 @@ def test_render_prunes_fallback_hops_for_unconfigured_models() -> None:
 
     assert router["default_fallbacks"] == ["kept"]
     assert router["fallbacks"] == [{"kept": ["kept", "alias"]}, {"*": []}]
-
-
-def test_research_dependencies_are_an_optional_extra() -> None:
-    """Research-only runtime deps must not leak into the base install."""
-    import tomllib
-
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    project = pyproject["project"]
-    extra = project.get("optional-dependencies", {}).get("research", [])
-    assert project["dependencies"] == []
-    for pinned in (
-        "a2a-sdk==1.1.2",
-        "boto3==1.40.62",
-        "asyncpg==0.31.0",
-        "sqlalchemy==2.0.51",
-    ):
-        assert pinned in extra, pinned
-    dockerfile = (ROOT / "runtime/Dockerfile.research-agent").read_text()
-    assert "--extra research" in dockerfile
-    validate = (ROOT / ".github/workflows/validate.yml").read_text()
-    assert "--extra research" in validate

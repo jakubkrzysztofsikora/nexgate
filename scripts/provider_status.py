@@ -23,10 +23,27 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-PROBE_URL = os.environ.get(
-    "NEXGATE_PROBE_URL",
-    f"http://127.0.0.1:{os.environ.get('LITELLM_PORT', '4000')}/v1/messages",
-)
+def _probe_url() -> str:
+    """Resolve which gateway address probes should target.
+
+    ``NEXGATE_PROBE_URL`` wins; otherwise follow the LITELLM_* wiring knobs so
+    a machine wired to a remote or tailnet gateway probes the same address its
+    clients use. Falls back to the loopback endpoint.
+    """
+    override = os.environ.get("NEXGATE_PROBE_URL")
+    if override:
+        return override
+    scheme = os.environ.get("LITELLM_SCHEME") or "http"
+    host = os.environ.get("LITELLM_HOST") or "127.0.0.1"
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"  # IPv6 literals need brackets in URLs
+    port = os.environ.get("LITELLM_PORT") or "4000"
+    default_port = (scheme == "http" and port == "80") or (scheme == "https" and port == "443")
+    netloc = host if default_port else f"{host}:{port}"
+    return f"{scheme}://{netloc}/v1/messages"
+
+
+PROBE_URL = _probe_url()
 
 # Provider Group Definitions & Keywords
 PROVIDER_GROUPS = {

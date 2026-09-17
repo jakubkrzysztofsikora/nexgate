@@ -90,6 +90,27 @@ curl http://127.0.0.1:4000/v1/messages \
   -d '{"model":"glm-5.3-flash","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}'
 ```
 
+### Reach the gateway from other machines (optional)
+
+Loopback stays published, so local clients keep working untouched.
+`NEXGATE_BIND_HOST` additionally publishes the port on one more host address
+(e.g. a tailnet IP); `LITELLM_HOST` / `LITELLM_SCHEME` / `LITELLM_PORT` set
+the address `bin/nexgate install` writes into each client — for when clients
+reach the gateway through a tailnet service DNS name, a LAN host, or a TLS
+reverse proxy in front of the loopback port:
+
+```bash
+# .env
+NEXGATE_BIND_HOST=100.x.y.z          # extra bind address, e.g. a tailnet IP
+LITELLM_HOST=gateway.example.ts.net  # what `bin/nexgate install` writes
+LITELLM_SCHEME=https
+LITELLM_PORT=443
+```
+
+`make up` republishes the port and prints the wiring target. With a Tailscale
+service DNS name in front of the loopback port (`tailscale serve`), the stack
+itself stays loopback-bound and only the client-facing name changes.
+
 ## When a provider fails
 
 Every model name maps to an ordered fallback chain (see

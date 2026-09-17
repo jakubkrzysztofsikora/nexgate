@@ -173,6 +173,9 @@ cmd_install() {
   local opus_model="${CLAUDE_CODE_OPUS_MODEL:-claude-opus-4-8[1m]}"
   local sonnet_model="${CLAUDE_CODE_SONNET_MODEL:-claude-sonnet-4-6}"
   local haiku_model="${CLAUDE_CODE_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
+  if [[ "$litellm_host" == *:* && "$litellm_host" != \[* ]]; then
+    litellm_host="[${litellm_host}]"  # IPv6 literals need brackets in URLs
+  fi
   # Omit the port when it's the scheme default so the URL stays clean
   # (https://host/ not https://host:443).
   if [[ -z "$litellm_port" ]] \
@@ -213,6 +216,7 @@ cmd_install() {
   local overlay
   overlay=$(jq -n \
     --arg base_url      "${gateway_url}" \
+    --arg master_key    "${master_key}" \
     --arg auth_header   "x-litellm-api-key: Bearer ${master_key}" \
     --arg model         "${default_model}" \
     --arg opus_model    "${opus_model}" \
@@ -236,7 +240,8 @@ cmd_install() {
        mcpServers: {
          "nexgate-subscription-status": {
            command: "python3",
-           args: [$mcp_script]
+           args: [$mcp_script],
+           env: { NEXGATE_PROBE_URL: ($base_url + "/v1/messages"), LITELLM_MASTER_KEY: $master_key }
          }
        }
      }')
@@ -311,9 +316,10 @@ wire_codex() {
   local codex_dir="${HOME}/.codex"
   local codex_config="${codex_dir}/config.toml"
   local codex_model="${CODEX_DEFAULT_MODEL:-chatgpt/gpt-5.6-terra}"
-  # Codex follows the same local endpoint as Claude Code by default. Operators
-  # can override it for their own remote deployment.
-  local codex_gateway="${CODEX_GATEWAY_URL:-${LITELLM_SCHEME:-http}://${LITELLM_HOST:-127.0.0.1}:${LITELLM_PORT:-4000}}"
+  # Codex follows the same endpoint Claude Code was wired to (cmd_install
+  # already normalized scheme-default ports). CODEX_GATEWAY_URL overrides it
+  # for a deliberately different remote deployment.
+  local codex_gateway="${CODEX_GATEWAY_URL:-$1}"
   local base_url="${codex_gateway%/}/v1"
 
   command -v codex >/dev/null 2>&1 || { warn "Codex CLI not found — skipping Codex wiring"; return 0; }

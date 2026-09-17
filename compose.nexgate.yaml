@@ -12,7 +12,14 @@ services:
       REDIS_HOST: redis
       LITELLM_LOG: INFO
     ports:
+      # Loopback is always published: the portable baseline for every
+      # operator, and the backend a local reverse proxy (e.g. `tailscale
+      # serve`) forwards to. Set NEXGATE_BIND_HOST to additionally publish
+      # the same port on one more host address, such as a tailnet IP.
+      # While the knob is unset, Compose de-duplicates the identical loopback
+      # entry, so the default stays a single loopback binding.
       - "127.0.0.1:${NEXGATE_PORT:-4000}:4000"
+      - "${NEXGATE_BIND_HOST:-127.0.0.1}:${NEXGATE_PORT:-4000}:4000"
     volumes:
       - ./runtime/state/litellm.yaml:/app/config.yaml:ro
       - ./runtime/state/chatgpt:/root/.config/litellm/chatgpt

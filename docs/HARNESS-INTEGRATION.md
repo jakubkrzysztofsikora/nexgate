@@ -18,7 +18,8 @@ bin/nexgate restore
 Claude Code should be launched with `claude --strict-mcp-config` so MCP
 servers cannot silently bypass the configured gateway. Codex uses the NexGate
 Responses API provider and the `CODEX_DEFAULT_MODEL` value from `.env`; set
-`CODEX_GATEWAY_URL` only when the gateway is intentionally remote.
+`LITELLM_HOST`/`LITELLM_SCHEME` (or `CODEX_GATEWAY_URL` for Codex alone) when
+the gateway is reached at a non-loopback address.
 
 The installer writes the LiteLLM master key into a mode-600 Codex environment
 file because Codex resolves provider credentials from its process environment.
