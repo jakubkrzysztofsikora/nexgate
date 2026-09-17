@@ -5,7 +5,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra research
+RUN uv sync --frozen --no-dev
 
 COPY research_agent ./research_agent
 

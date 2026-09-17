@@ -30,9 +30,9 @@ name = "aiologic"
 version = "0.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "sniffio", marker = "python_full_version < '3.14'" },
+    { name = "sniffio" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
-    { name = "wrapt", marker = "python_full_version < '3.14'" },
+    { name = "wrapt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/7a/d51f2fde1e8ae8a83431f8e97b7a71e9358cdb1d4d2ce6be387fa44d68de/aiologic-0.17.1.tar.gz", hash = "sha256:2e1b93b9e88ced318c2a63ad7b382688f40cbfe40e3d42258d49dc9c5aea179d", size = 252354, upload-time = "2026-06-27T20:41:33.25Z" }
 wheels = [
@@ -389,7 +389,7 @@ name = "culsans"
 version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiologic", marker = "python_full_version < '3.14'" },
+    { name = "aiologic" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
@@ -575,9 +575,7 @@ wheels = [
 name = "nexgate"
 version = "0.1.0"
 source = { virtual = "." }
-
-[package.optional-dependencies]
-research = [
+dependencies = [
     { name = "a2a-sdk" },
     { name = "asyncpg" },
     { name = "boto3" },
@@ -598,17 +596,16 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "a2a-sdk", marker = "extra == 'research'", specifier = "==1.1.2" },
-    { name = "asyncpg", marker = "extra == 'research'", specifier = "==0.31.0" },
-    { name = "boto3", marker = "extra == 'research'", specifier = "==1.40.62" },
-    { name = "fastapi", marker = "extra == 'research'", specifier = "==0.139.0" },
-    { name = "greenlet", marker = "extra == 'research'", specifier = "==3.3.2" },
-    { name = "httpx", marker = "extra == 'research'", specifier = "==0.28.1" },
-    { name = "pydantic", marker = "extra == 'research'", specifier = "==2.13.5" },
-    { name = "sqlalchemy", marker = "extra == 'research'", specifier = "==2.0.51" },
-    { name = "uvicorn", marker = "extra == 'research'", specifier = "==0.41.0" },
+    { name = "a2a-sdk", specifier = "==1.1.2" },
+    { name = "asyncpg", specifier = "==0.31.0" },
+    { name = "boto3", specifier = "==1.40.62" },
+    { name = "fastapi", specifier = "==0.139.0" },
+    { name = "greenlet", specifier = "==3.3.2" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "pydantic", specifier = "==2.13.5" },
+    { name = "sqlalchemy", specifier = "==2.0.51" },
+    { name = "uvicorn", specifier = "==0.41.0" },
 ]
-provides-extras = ["research"]
 
 [package.metadata.requires-dev]
 dev = [

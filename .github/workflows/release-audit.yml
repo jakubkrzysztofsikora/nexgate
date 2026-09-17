@@ -28,7 +28,7 @@ jobs:
           format: spdx-json
           output-file: reports/release-audit/sbom.spdx.json
       - name: Install locked validation tools
-        run: uv sync --locked --group dev --extra research
+        run: uv sync --locked --group dev
       - name: Validate and scan the source archive
         run: uv run make release-audit
       - name: Upload unpublished audit artifacts
