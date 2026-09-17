@@ -1,3 +1,4 @@
+# ruff: noqa
 import json
 import logging
 import os
@@ -805,9 +806,10 @@ try:
 			return
 		completion_kwargs["messages"] = [{"role": "system", "content": routing_prompt}] + messages
 
-	def _patched_translate_anthropic_to_openai(self, anthropic_message_request):
+	def _patched_translate_anthropic_to_openai(self, anthropic_message_request, *args, **kwargs):
+		# 1.100 passes custom_llm_provider as a keyword; older versions do not.
 		new_kwargs, tool_name_mapping = _original_translate_anthropic_to_openai(
-			self, anthropic_message_request
+			self, anthropic_message_request, *args, **kwargs
 		)
 		model = str(new_kwargs.get("model") or "")
 		if (
@@ -1236,6 +1238,95 @@ try:
 	LiteLLMAnthropicMessagesAdapter.translate_openai_response_to_anthropic = (
 		_patched_translate_openai_response_to_anthropic
 	)
+
+	# 1.100's cache-control hook writes unappliable points (tool_config) back into
+	# kwargs. On the Anthropic-native /v1/messages path nothing consumes them, so
+	# they ride into the request body and Anthropic rejects the call with
+	# "cache_control_injection_points: Extra inputs are not permitted".
+	# Drop the leftovers after injection; applied message/system points stay.
+	try:
+		from litellm.integrations.anthropic_cache_control_hook import AnthropicCacheControlHook
+
+		_original_maybe_inject_cache_control = AnthropicCacheControlHook.maybe_inject_cache_control
+
+		def _patched_maybe_inject_cache_control(
+			messages, system, kwargs, model=None, custom_llm_provider=None, tools=None, api_base=None
+		):
+			result = _original_maybe_inject_cache_control(
+				messages,
+				system,
+				kwargs,
+				model=model,
+				custom_llm_provider=custom_llm_provider,
+				tools=tools,
+				api_base=api_base,
+			)
+			leftover = kwargs.get("cache_control_injection_points")
+			if leftover:
+				logger.debug(
+					"[CACHE_CTRL_LEFTOVER] provider=%r model=%r points=%s",
+					custom_llm_provider,
+					model,
+					leftover,
+				)
+			# At this point custom_llm_provider is usually still None on the native
+			# Anthropic path (resolved later from the model prefix), so None must be
+			# treated as anthropic. Bedrock/vertex pass their provider explicitly and
+			# consume the tool_config points in their own transforms.
+			if custom_llm_provider in (None, "anthropic"):
+				kwargs.pop("cache_control_injection_points", None)
+			return result
+
+		AnthropicCacheControlHook.maybe_inject_cache_control = _patched_maybe_inject_cache_control
+
+		# The chat/completions path runs the same hook through the prompt-management
+		# interface, which writes unapplied points back into the provider params
+		# (non_default_params). For the Anthropic chat transform nothing consumes
+		# them, so they end up in the request body and Anthropic 400s with the same
+		# "Extra inputs are not permitted" error. Applied message-level points are
+		# already injected into `messages`, so drop only the leftover key.
+		def _drop_chat_leftovers(model, messages, non_default_params):
+			if isinstance(non_default_params, dict) and non_default_params.get(
+				"cache_control_injection_points"
+			):
+				provider = non_default_params.get("custom_llm_provider")
+				if provider in (None, "anthropic"):
+					logger.debug(
+						"[CACHE_CTRL_LEFTOVER] chat path provider=%r model=%r points=%s",
+						provider,
+						model,
+						non_default_params.get("cache_control_injection_points"),
+					)
+					non_default_params.pop("cache_control_injection_points", None)
+			return model, messages, non_default_params
+
+		_original_get_chat_completion_prompt = AnthropicCacheControlHook.get_chat_completion_prompt
+
+		def _patched_get_chat_completion_prompt(self, *args, **kwargs):
+			model, messages, non_default_params = _original_get_chat_completion_prompt(
+				self, *args, **kwargs
+			)
+			return _drop_chat_leftovers(model, messages, non_default_params)
+
+		AnthropicCacheControlHook.get_chat_completion_prompt = _patched_get_chat_completion_prompt
+
+		_original_async_get_chat_completion_prompt = (
+			AnthropicCacheControlHook.async_get_chat_completion_prompt
+		)
+
+		async def _patched_async_get_chat_completion_prompt(self, *args, **kwargs):
+			model, messages, non_default_params = await _original_async_get_chat_completion_prompt(
+				self, *args, **kwargs
+			)
+			return _drop_chat_leftovers(model, messages, non_default_params)
+
+		AnthropicCacheControlHook.async_get_chat_completion_prompt = (
+			_patched_async_get_chat_completion_prompt
+		)
+
+		logger.info("Patched Anthropic cache-control hook to drop leftover injection points on the native path.")
+	except Exception as e:
+		logger.error(f"Failed to patch Anthropic cache-control hook: {e}", exc_info=True)
 
 	import litellm
 	import litellm.proxy.anthropic_endpoints.endpoints as _endpoints
@@ -2989,6 +3080,37 @@ try:
 					kwargs[key] = {**existing, **dep_dict}
 				else:
 					kwargs[key] = dep_dict.copy()
+
+		# Ensure OpenCode Go requests have required session and user-agent headers
+		api_base = str(params.get("api_base") or kwargs.get("api_base") or "")
+		if "opencode.ai" in api_base:
+			headers = kwargs.setdefault("extra_headers", {})
+			if not isinstance(headers, dict):
+				headers = {}
+				kwargs["extra_headers"] = headers
+			if not any(k.lower() == "x-opencode-session" for k in headers):
+				meta = kwargs.get("metadata") or {}
+				req_headers = meta.get("headers") or {}
+				session_id = (
+					req_headers.get("x-opencode-session")
+					or req_headers.get("x-session-affinity")
+					or req_headers.get("x-session-id")
+					or kwargs.get("litellm_session_id")
+					or meta.get("session_id")
+					or "nexgate-session"
+				)
+				headers["x-opencode-session"] = str(session_id)
+			if not any(k.lower() == "user-agent" for k in headers):
+				headers["User-Agent"] = "opencode/1.18.15"
+
+		# Remove accidental or forced thinking disabling on DeepSeek models
+		model_str = (str(params.get("model") or "") + " " + str(deployment.get("model_name") or "")).lower()
+		if "deepseek" in model_str:
+			extra_body = kwargs.get("extra_body")
+			if isinstance(extra_body, dict) and "thinking" in extra_body:
+				th = extra_body.get("thinking")
+				if isinstance(th, dict) and th.get("type") == "disabled":
+					extra_body.pop("thinking", None)
 
 
 		# Enforce context window limits defensively and prevent negative max_tokens

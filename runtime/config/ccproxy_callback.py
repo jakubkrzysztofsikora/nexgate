@@ -5035,6 +5035,53 @@ _CLIENT_AUTH_HEADER_NAMES = (
 )
 
 
+def _iter_provider_specific_entries(data: dict[str, Any]) -> list[dict[str, Any]]:
+	"""LiteLLM 1.100 sends provider_specific_header as one dict or a list of scoped dicts."""
+	value = data.get("provider_specific_header")
+	if isinstance(value, dict):
+		return [value]
+	if isinstance(value, list):
+		return [entry for entry in value if isinstance(entry, dict)]
+	return []
+
+
+def _scoped_entry_extra_headers(entry: dict[str, Any]) -> dict[str, Any]:
+	extra_headers = entry.get("extra_headers")
+	if not isinstance(extra_headers, dict):
+		extra_headers = {}
+		entry["extra_headers"] = extra_headers
+	return extra_headers
+
+
+def _anthropic_scoped_extra_headers(
+	data: dict[str, Any], *, exact_only: bool = False, create: bool = False
+) -> list[dict[str, Any]]:
+	"""Extra-header dicts for provider_specific_header entries scoped to anthropic.
+
+	exact_only narrows to entries whose scope is exactly "anthropic", so the
+	OAuth bearer never rides on entries shared with bedrock/vertex_ai.
+	"""
+	matched: list[dict[str, Any]] = []
+	for entry in _iter_provider_specific_entries(data):
+		providers = [p.strip() for p in str(entry.get("custom_llm_provider") or "").split(",")]
+		if "anthropic" not in providers:
+			continue
+		if exact_only and providers != ["anthropic"]:
+			continue
+		matched.append(_scoped_entry_extra_headers(entry))
+	if matched or not create:
+		return matched
+	entry = {"custom_llm_provider": "anthropic", "extra_headers": {}}
+	value = data.get("provider_specific_header")
+	if isinstance(value, list):
+		value.append(entry)
+	elif isinstance(value, dict):
+		data["provider_specific_header"] = [value, entry]
+	else:
+		data["provider_specific_header"] = entry
+	return [entry["extra_headers"]]
+
+
 def _strip_client_auth_headers(data: dict[str, Any]) -> None:
 	"""Remove client/proxy auth headers before non-Anthropic provider calls."""
 	for header_key in ("headers", "extra_headers"):
@@ -5043,9 +5090,8 @@ def _strip_client_auth_headers(data: dict[str, Any]) -> None:
 			for header_name in _CLIENT_AUTH_HEADER_NAMES:
 				_drop_header(headers, header_name)
 
-	provider_specific_header = data.get("provider_specific_header")
-	if isinstance(provider_specific_header, dict):
-		extra_headers = provider_specific_header.get("extra_headers")
+	for entry in _iter_provider_specific_entries(data):
+		extra_headers = entry.get("extra_headers")
 		if isinstance(extra_headers, dict):
 			for header_name in _CLIENT_AUTH_HEADER_NAMES:
 				_drop_header(extra_headers, header_name)
@@ -5069,14 +5115,11 @@ def _set_anthropic_oauth_headers(data: dict[str, Any], auth_header: str) -> None
 		_drop_header(headers, "x-api-key")
 		headers["authorization"] = auth_header
 
-	provider_specific_header = data.setdefault("provider_specific_header", {})
-	if isinstance(provider_specific_header, dict):
-		provider_specific_header["custom_llm_provider"] = "anthropic"
-		extra_headers = provider_specific_header.setdefault("extra_headers", {})
-		if isinstance(extra_headers, dict):
-			_drop_header(extra_headers, "authorization")
-			_drop_header(extra_headers, "x-api-key")
-			extra_headers["authorization"] = auth_header
+	for extra_headers in _anthropic_scoped_extra_headers(data):
+		_drop_header(extra_headers, "authorization")
+		_drop_header(extra_headers, "x-api-key")
+	for extra_headers in _anthropic_scoped_extra_headers(data, exact_only=True, create=True):
+		extra_headers["authorization"] = auth_header
 
 	proxy_request = data.get("proxy_server_request")
 	if isinstance(proxy_request, dict) and isinstance(proxy_request.get("headers"), dict):
@@ -5228,13 +5271,15 @@ def forward_provider_oauth(
 
 	config = get_config()
 	_set_anthropic_oauth_headers(data, auth_header)
-	extra_headers = data["provider_specific_header"]["extra_headers"]
+	extra_headers_list = _anthropic_scoped_extra_headers(data, exact_only=True, create=True)
 
 	custom_user_agent = config.get_oauth_user_agent(provider_name)
 	if custom_user_agent:
-		extra_headers["user-agent"] = custom_user_agent
+		for extra_headers in extra_headers_list:
+			extra_headers["user-agent"] = custom_user_agent
 	elif headers.get("user-agent"):
-		extra_headers.setdefault("user-agent", headers["user-agent"])
+		for extra_headers in extra_headers_list:
+			extra_headers.setdefault("user-agent", headers["user-agent"])
 
 	return data
 

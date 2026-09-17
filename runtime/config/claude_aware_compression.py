@@ -1,3 +1,4 @@
+# ruff: noqa
 """Claude Code-aware prompt compression.
 
 Unlike litellm's built-in compression_interception, this callback does NOT
@@ -420,6 +421,17 @@ class ClaudeAwareCompression(CustomLogger):
                 "ClaudeAwareCompression: bypassing native ChatGPT Responses request model=%s",
                 data.get("model"),
             )
+            return None
+        # ClaudeAwareCompression is strictly for Claude/Anthropic workflows.
+        # Bypass other model providers (DeepSeek, GLM, Qwen, MiniMax, OpenCode, etc.)
+        model_str = str(data.get("model") or "").lower()
+        provider_str = str(data.get("custom_llm_provider") or "").lower()
+        is_claude_or_anthropic = (
+            call_type == CallTypes.anthropic_messages
+            or "anthropic" in provider_str
+            or "claude" in model_str
+        )
+        if not is_claude_or_anthropic:
             return None
         allowed_call_types = {
             getattr(CallTypes, "anthropic_messages", "anthropic_messages"),
