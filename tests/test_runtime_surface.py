@@ -30,10 +30,16 @@ def test_litellm_image_keeps_existing_compatibility_modules() -> None:
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
-    assert len(catalog["model_list"]) == 111
+    assert len(catalog["model_list"]) == 129
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
+    # The free-GPU tier deliberately targets fixed local/free endpoints (the
+    # operator's Modal and Kaggle apps, plus the local 429 sink); every
+    # portable alias stays environment-driven so the baseline ships no
+    # operator endpoints.
+    fixed_endpoint_aliases = {"qwen36-modal", "qwen36-kaggle", "qwen38-modal", "llm-422-sink"}
     assert all(
         not str(model["litellm_params"].get("api_base", "")).startswith(("http://", "https://"))
+        or model["model_name"] in fixed_endpoint_aliases
         for model in catalog["model_list"]
     )
     assert catalog["general_settings"]["database_url"] == "os.environ/DATABASE_URL"

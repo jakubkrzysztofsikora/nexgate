@@ -86,6 +86,8 @@ and proves gateway transport, not a live research provider's answer quality.
 | `or/gpt-oss-20b-free` | `NEXGATE_OR_GPT_OSS_20B_FREE_API_BASE`, `OPENROUTER_API_KEY` |
 | `qwencloud/kimi-k2.7-code` | `NEXGATE_QWENCLOUD_KIMI_K2_7_CODE_API_BASE`, `QWENCLOUD_API_KEY` |
 | `mistral/glm-5.2` | `MISTRAL_API_KEY` |
+| `mistral/glm-5.3` | `MISTRAL_API_KEY` |
+| `mistral/glm-5.3-flash` | `MISTRAL_API_KEY` |
 | `opencode/big-pickle` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-flash` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-pro` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
@@ -127,6 +129,22 @@ and proves gateway transport, not a live research provider's answer quality.
 | `fallback-claude-sonnet-4-6` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_4_6_API_BASE` |
 | `fallback-claude-fable-5-1` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_FABLE_5_1_API_BASE` |
 | `fallback-claude-haiku-4-5-20251001` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE` |
+| `qwen36-modal` | `NEXGATE_QWEN36_API_KEY` |
+| `qwen36-kaggle` | `NEXGATE_QWEN36_API_KEY` |
+| `qwen38-modal` | `NEXGATE_QWEN36_API_KEY` |
+| `llm-422-sink` | _(none — terminal 429 sink; local only, not a provider)_ |
+| `nvidia/deepseek-v4-pro` | `NEXGATE_NVIDIA_DEEPSEEK_V4_PRO_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/gpt-oss-20b` | `NEXGATE_NVIDIA_GPT_OSS_20B_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/kimi-k3` | `NEXGATE_NVIDIA_KIMI_K3_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/minimax-m3` | `NEXGATE_NVIDIA_MINIMAX_M3_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/nemotron-3.5-lightning` | `NEXGATE_NVIDIA_NEMOTRON_3_5_LIGHTNING_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/nemotron-3-super-120b` | `NEXGATE_NVIDIA_NEMOTRON_3_SUPER_120B_API_BASE`, `NVIDIA_API_KEY` |
+| `nvidia/nemotron-3-ultra-550b` | `NEXGATE_NVIDIA_NEMOTRON_3_ULTRA_550B_API_BASE`, `NVIDIA_API_KEY` |
+| `greenpt/green-l` | `NEXGATE_GREENPT_GREEN_L_API_BASE`, `GREENPT_API_KEY` |
+| `greenpt/green-r` | `NEXGATE_GREENPT_GREEN_R_API_BASE`, `GREENPT_API_KEY` |
+| `greenpt/glm-5.2` | `NEXGATE_GREENPT_GLM_5_2_API_BASE`, `GREENPT_API_KEY` |
+| `greenpt/gpt-oss-120b` | `NEXGATE_GREENPT_GPT_OSS_120B_API_BASE`, `GREENPT_API_KEY` |
+| `greenpt/kimi-k2.7-code` | `NEXGATE_GREENPT_KIMI_K2_7_CODE_API_BASE`, `GREENPT_API_KEY` |
 
 For a local model, point the relevant `*_API_BASE` variable at any
 OpenAI-compatible server you operate. NexGate does not prescribe a local
