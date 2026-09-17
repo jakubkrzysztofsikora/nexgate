@@ -27,3 +27,7 @@ jobs:
         run: uv run make validate demo-smoke
       - name: Scan tracked content and reachable history for secrets
         uses: zricethezav/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        with:
+          # Authenticated user lookup avoids the shared-runner API rate limit
+          # that otherwise trips license validation on a user-owned repo.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
