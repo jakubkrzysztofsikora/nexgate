@@ -30,7 +30,7 @@ def test_litellm_image_keeps_existing_compatibility_modules() -> None:
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
-    assert len(catalog["model_list"]) == 129
+    assert len(catalog["model_list"]) == 130
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     # Every alias, including the free-GPU tier, must wire its endpoint through
     # the operator's ignored .env: the public catalog ships no endpoints.

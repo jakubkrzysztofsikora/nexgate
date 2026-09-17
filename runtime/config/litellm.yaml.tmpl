@@ -696,6 +696,22 @@ model_list:
     supports_parallel_function_calling: true
     disable_background_health_check: true
 
+- model_name: qwen38-heretic
+  litellm_params:
+    model: openai/trohrbaugh/Qwen3.8-27B-heretic-ara
+    api_base: os.environ/NEXGATE_QWEN38_HERETIC_API_BASE
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 16384
+    timeout: 60
+    num_retries: 5
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+
 - model_name: qwen36-modal
   litellm_params:
     model: openai/Qwen/Qwen3.6-35B-A3B-FP8
