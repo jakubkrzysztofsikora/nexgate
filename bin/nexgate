@@ -78,8 +78,11 @@ BACKUP="${SETTINGS_LOCAL}.nexgate-backup"
 PRE_NEXGATE="${SETTINGS_LOCAL}.pre-nexgate"
 
 # ── Load nexgate .env (whitelist only the keys we need) ────────────
-# Pre-set env vars win over .env values. The portable default is the local
-# NexGate endpoint; an operator may override it for a remote deployment.
+# The operator overlay is the source of truth: a stale export in the calling
+# shell must not shadow it (leftover LITELLM_HOST/PORT exports silently
+# produced mixed local/tailnet wiring when the gateway address changed). Keys
+# absent from the file still fall back to the environment and built-in
+# defaults.
 load_nexgate_env() {
   local env_file="${NEXGATE_ROOT}/.env"
   if [[ ! -f "$env_file" ]]; then
@@ -91,13 +94,14 @@ load_nexgate_env() {
   while IFS='=' read -r k v; do
     case "$k" in
       LITELLM_HOST|LITELLM_PORT|LITELLM_MASTER_KEY|CLAUDE_CODE_DEFAULT_MODEL|CLAUDE_CODE_OPUS_MODEL|CLAUDE_CODE_SONNET_MODEL|CLAUDE_CODE_HAIKU_MODEL|LITELLM_SCHEME|CODEX_DEFAULT_MODEL|CODEX_GATEWAY_URL)
-        # Skip if already set in the environment (allows inline overrides)
-        [[ -n "$v" ]] && [[ -z "${!k:-}" ]] && printf -v "$k" '%s' "$v"
+        [[ -z "$v" ]] && continue
+        if [[ -n "${!k:-}" && "${!k}" != "$v" ]]; then
+          warn "Ignoring environment ${k}=${!k}; ${env_file##*/} defines ${k}=${v}"
+        fi
+        printf -v "$k" '%s' "$v"
         ;;
     esac
   done < "$env_file"
-  # The final loop iteration short-circuits the && chain when the value is
-  # pre-set in the environment; that rc=1 would kill set -e silently.
   return 0
 }
 

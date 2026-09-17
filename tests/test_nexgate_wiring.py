@@ -201,3 +201,37 @@ class TestEnvFileResolution:
         assert result.returncode == 0, result.stderr
         settings = json.loads((project / ".claude/settings.local.json").read_text())
         assert "Bearer sk-fallback-key" in settings["env"]["ANTHROPIC_CUSTOM_HEADERS"]
+
+    def test_env_file_values_win_over_stale_shell_exports(self, tmp_path, monkeypatch) -> None:
+        """Stale LITELLM_HOST/PORT exports (e.g. leftover ~/.zshrc lines) must
+        not shadow the operator overlay: that produced a mixed local/tailnet
+        URL on the first reinstall after the gateway address changed."""
+        home = tmp_path / "home"
+        repo = tmp_path / "repo"
+        project = tmp_path / "project"
+        for path in (home, repo, project):
+            path.mkdir(parents=True)
+        (repo / ".env").write_text(
+            "LITELLM_HOST=gateway.example.ts.net\n"
+            "LITELLM_SCHEME=https\n"
+            "LITELLM_PORT=443\n"
+            "LITELLM_MASTER_KEY=sk-file-key\n"
+        )
+        fake_bin = tmp_path / "fakebin"
+        fake_bin.mkdir()
+        for cli in ("codex", "opencode"):
+            stub = fake_bin / cli
+            stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+            stub.chmod(0o755)
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("NEXGATE_ROOT", str(repo))
+        monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
+        monkeypatch.setenv("LITELLM_HOST", "127.0.0.1")
+        monkeypatch.setenv("LITELLM_PORT", "4000")
+        for leaked in ("LITELLM_SCHEME", "LITELLM_MASTER_KEY", "CODEX_DEFAULT_MODEL"):
+            monkeypatch.delenv(leaked, raising=False)
+        result = run_bash_installer(project, "install")
+        assert result.returncode == 0, result.stderr
+        settings = json.loads((project / ".claude/settings.local.json").read_text())
+        assert settings["env"]["ANTHROPIC_BASE_URL"] == "https://gateway.example.ts.net"
+        assert "Ignoring environment" in result.stdout
