@@ -11,6 +11,7 @@ mid-session.
 [Quickstart](#quickstart) •
 [Wire your tools](#wire-your-tools) •
 [When a provider fails](#when-a-provider-fails) •
+[Run models locally or for free](#run-a-model-locally) •
 [What is included](#what-is-included) •
 [Commands](#commands) •
 [Scope](#scope-and-security)
@@ -145,12 +146,77 @@ Already supervising `llama-server` yourself via launchd or systemd? Set
 instead of downloading or spawning anything. To skip the hook entirely for one
 run, use `NEXGATE_SKIP_LOCAL_BIELIK=1 make up`.
 
+## Run models for free
+
+NexGate ships no model runtime — but any OpenAI-compatible endpoint you
+control can become a route. That includes a server on your own machine
+(llama.cpp, Ollama, vLLM, MLX) and free GPU sources you operate yourself
+(a notebook GPU, a cloud account's free credits, a serverless-GPU trial).
+One rule: it must speak the OpenAI API at a `/v1` base URL.
+
+Three steps to wire one in:
+
+1. **Serve it** and note the base URL. If it runs on the same host as Docker,
+   use `http://host.docker.internal:<port>/v1` so the gateway container can
+   reach it.
+
+2. **Name its credentials** in the operator overlay. A route renders only when
+   every referenced variable is set and no longer a placeholder:
+
+   ```bash
+   # .env
+   NEXGATE_MYENDPOINT_API_BASE=http://host.docker.internal:8080/v1
+   NEXGATE_MYENDPOINT_API_KEY=any-non-empty-value
+   ```
+
+3. **Declare the alias** in `runtime/config/litellm.yaml.tmpl`:
+
+   ```yaml
+   - model_name: my-free-model
+     litellm_params:
+       model: openai/<served-model-id>
+       api_base: os.environ/NEXGATE_MYENDPOINT_API_BASE
+       api_key: os.environ/NEXGATE_MYENDPOINT_API_KEY
+       drop_params: true
+       timeout: 60
+     model_info:
+       context_window: 32768
+       disable_background_health_check: true
+   ```
+
+`make up` re-renders and restarts. Then verify the route is genuinely yours
+and not a fallback:
+
+```bash
+curl http://127.0.0.1:4000/v1/chat/completions \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"my-free-model","max_tokens":8,"disable_fallbacks":true,
+       "messages":[{"role":"user","content":"hi"}]}'
+```
+
+`disable_fallbacks: true` makes the answer — or the error — come from that
+endpoint itself. Without it, a healthy-looking 200 may have been served by the
+next provider in the chain.
+
+**Cold starts and quotas.** Free tiers sleep: a scaled-to-zero server can take
+minutes to answer its first request. Two mitigations: keep the server warm
+where the platform allows it (a minimum-replica or anti-scale-down knob), and
+put the route behind a fallback chain so a sleeping endpoint degrades to the
+next provider instead of failing the session.
+
+The shipped catalog uses exactly this pattern for its free-GPU tier aliases
+(`qwen36-modal`, `qwen36-kaggle`, `qwen38-modal`, `qwen38-heretic`): they stay
+inert until you fill in their `NEXGATE_*_API_BASE` values, then render like any
+other route. See [docs/PROVIDER-MATRIX.md](docs/PROVIDER-MATRIX.md) for every
+alias and the variables it needs.
+
 ## What is included
 
 | Area | What it provides | Default posture |
 | --- | --- | --- |
 | LiteLLM gateway | Multi-provider model catalog, routing, fallbacks, Responses API | Localhost only |
-| Provider catalog | 68 portable aliases; only configured routes render | Opt-in per provider |
+| Provider catalog | 130 portable aliases; only configured routes render | Opt-in per provider |
 | Claude Code / Codex | Wiring overlays, model overrides, ccproxy hooks | Installed by you, reversible |
 | Token optimization | Claude-aware compression, request sanitization, tool-call recovery | In the LiteLLM runtime |
 | Observability | Prometheus + provisioned Grafana dashboard | `make observability` |
