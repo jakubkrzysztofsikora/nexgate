@@ -436,6 +436,8 @@ wire_opencode() {
     "kimi-k3"
     "minimax-m3"
     "mistral"
+    "qwen38-modal"
+    "qwen38-heretic"
   )
 
   mkdir -p "$opencode_dir"
