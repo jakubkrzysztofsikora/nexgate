@@ -717,6 +717,23 @@ model_list:
     supports_parallel_function_calling: true
     disable_background_health_check: true
 
+# Free-tier overflow for the same alias: a Colab T4 serving an IQ4_XS GGUF of
+# the same heretic model behind a Cloudflare tunnel. It only exists while the
+# Colab session is live; LiteLLM routes around it when it is down.
+- model_name: qwen38-heretic
+  litellm_params:
+    model: openai/heretic
+    api_base: os.environ/NEXGATE_QWEN38_HERETIC_COLAB_API_BASE
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 8192
+    timeout: 90
+    num_retries: 1
+  model_info:
+    context_window: 16384
+    supports_function_calling: true
+    disable_background_health_check: true
+
 - model_name: qwen36-modal
   litellm_params:
     model: openai/Qwen/Qwen3.6-35B-A3B-FP8
