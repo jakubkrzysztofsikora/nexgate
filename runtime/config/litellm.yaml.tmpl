@@ -1,7 +1,9 @@
 router_settings:
   enable_pre_call_checks: true
   disable_cooldowns: true
-  stream_timeout: 60
+  # Long streaming/generation requests (big-context compaction on a slow GPU
+  # backend) must not be cut off; the deployments carry their own timeouts.
+  stream_timeout: 1800
   default_fallbacks:
   - kimi-k3
   - qwencloud/qwen3.7-plus
@@ -727,7 +729,7 @@ model_list:
     api_key: os.environ/NEXGATE_QWEN36_API_KEY
     drop_params: true
     max_tokens: 8192
-    timeout: 90
+    timeout: 1800
     num_retries: 1
   model_info:
     context_window: 262144
