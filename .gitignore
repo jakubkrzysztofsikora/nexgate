@@ -19,3 +19,6 @@ logs/
 # Local agent scaffolding and runtime state — never commit.
 data/
 PLAN.md
+
+# Playwright MCP snapshots
+.playwright-mcp/
