@@ -206,17 +206,18 @@ put the route behind a fallback chain so a sleeping endpoint degrades to the
 next provider instead of failing the session.
 
 The shipped catalog uses exactly this pattern for its free-GPU tier aliases
-(`qwen36-modal`, `qwen36-kaggle`, `qwen38-modal`, `qwen38-heretic`): they stay
-inert until you fill in their `NEXGATE_*_API_BASE` values, then render like any
-other route. See [docs/PROVIDER-MATRIX.md](docs/PROVIDER-MATRIX.md) for every
-alias and the variables it needs.
+(`qwen36-modal`, `qwen36-kaggle`, `qwen38-modal`, `qwen38-heretic`,
+`qwen38-heretic-a100`): they stay inert until you fill in their
+`NEXGATE_*_API_BASE` values, then render like any other route. See
+[docs/PROVIDER-MATRIX.md](docs/PROVIDER-MATRIX.md) for every alias and the
+variables it needs.
 
 ## What is included
 
 | Area | What it provides | Default posture |
 | --- | --- | --- |
 | LiteLLM gateway | Multi-provider model catalog, routing, fallbacks, Responses API | Localhost only |
-| Provider catalog | 130 portable aliases; only configured routes render | Opt-in per provider |
+| Provider catalog | 131 portable aliases; only configured routes render | Opt-in per provider |
 | Claude Code / Codex | Wiring overlays, model overrides, ccproxy hooks | Installed by you, reversible |
 | Token optimization | Claude-aware compression, request sanitization, tool-call recovery | In the LiteLLM runtime |
 | Observability | Prometheus + provisioned Grafana dashboard | `make observability` |

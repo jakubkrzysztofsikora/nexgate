@@ -683,6 +683,11 @@ router_settings:
     - qwen36-modal
     - qwen36-kaggle
     - llm-422-sink
+  - qwen38-heretic-a100:
+    - qwen38-heretic
+    - qwen36-modal
+    - qwen36-kaggle
+    - llm-422-sink
 model_list:
 # --- free-GPU tier: Modal L40S -> Kaggle T4x2 (CF tunnel) -> 429 sink (added 2026-09-16) ---
 # Wire your own endpoints through the NEXGATE_*_API_BASE variables below; the
@@ -719,13 +724,31 @@ model_list:
     supports_parallel_function_calling: true
     disable_background_health_check: true
 
-# Free-tier overflow for the same alias: a Colab T4 serving an IQ4_XS GGUF of
-# the same heretic model behind a Cloudflare tunnel. It only exists while the
-# Colab session is live; LiteLLM routes around it when it is down.
+# Free-tier overflow for the same alias: a Colab GPU (L4) serving an IQ4_XS
+# GGUF of the same heretic model behind a Cloudflare tunnel. It only exists
+# while the Colab session is live; LiteLLM routes around it when it is down.
 - model_name: qwen38-heretic
   litellm_params:
     model: openai/heretic
     api_base: os.environ/NEXGATE_QWEN38_HERETIC_COLAB_API_BASE
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 8192
+    timeout: 1800
+    num_retries: 1
+  model_info:
+    context_window: 262144
+    supports_function_calling: true
+    disable_background_health_check: true
+
+# Dedicated A100 Colab tier of the same heretic GGUF, reserved for pi
+# compactions (see ~/.pi/agent/extensions/a100-compaction.ts). Same weights as
+# the L4 deployment above, just faster; LiteLLM falls back to the
+# qwen38-heretic group when the A100 session is offline.
+- model_name: qwen38-heretic-a100
+  litellm_params:
+    model: openai/heretic
+    api_base: os.environ/NEXGATE_QWEN38_HERETIC_A100_API_BASE
     api_key: os.environ/NEXGATE_QWEN36_API_KEY
     drop_params: true
     max_tokens: 8192

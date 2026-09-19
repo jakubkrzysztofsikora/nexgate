@@ -32,7 +32,7 @@ def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog = yaml.safe_load(catalog_text)
     # Aliases can carry multiple deployments (e.g. qwen38-heretic on Modal and
     # on a free Colab tier); the portable surface is the distinct alias set.
-    assert len({model["model_name"] for model in catalog["model_list"]}) == 130
+    assert len({model["model_name"] for model in catalog["model_list"]}) == 131
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     # Every alias, including the free-GPU tier, must wire its endpoint through
     # the operator's ignored .env: the public catalog ships no endpoints.
