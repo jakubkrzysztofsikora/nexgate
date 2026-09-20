@@ -134,6 +134,7 @@ and proves gateway transport, not a live research provider's answer quality.
 | `qwen38-modal` | `NEXGATE_QWEN38_MODAL_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen38-heretic` | `NEXGATE_QWEN38_HERETIC_API_BASE`, `NEXGATE_QWEN38_HERETIC_COLAB_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen38-heretic-a100` | `NEXGATE_QWEN38_HERETIC_A100_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
+| `qwen38-heretic-lit` | `NEXGATE_QWEN38_HERETIC_LIT_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `llm-422-sink` | `NEXGATE_422_SINK_API_BASE` |
 | `nvidia/deepseek-v4-pro` | `NEXGATE_NVIDIA_DEEPSEEK_V4_PRO_API_BASE`, `NVIDIA_API_KEY` |
 | `nvidia/gpt-oss-20b` | `NEXGATE_NVIDIA_GPT_OSS_20B_API_BASE`, `NVIDIA_API_KEY` |

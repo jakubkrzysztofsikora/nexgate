@@ -680,10 +680,17 @@ router_settings:
     - qwen36-kaggle
     - llm-422-sink
   - qwen38-heretic:
+    - qwen38-heretic-lit
     - qwen36-modal
     - qwen36-kaggle
     - llm-422-sink
   - qwen38-heretic-a100:
+    - qwen38-heretic
+    - qwen38-heretic-lit
+    - qwen36-modal
+    - qwen36-kaggle
+    - llm-422-sink
+  - qwen38-heretic-lit:
     - qwen38-heretic
     - qwen36-modal
     - qwen36-kaggle
@@ -756,6 +763,25 @@ model_list:
     num_retries: 1
   model_info:
     context_window: 262144
+    supports_function_calling: true
+    disable_background_health_check: true
+
+# Lightning AI Studio (T4) tier of the same heretic GGUF, staged on the free
+# CPU studio and served from a T4 (16 GB) at 65536 ctx. Slow (2-3 tok/s) but
+# free and persistent (Studio storage keeps the weights across restarts);
+# managed by lightning_supervisor.py on the Mac. Last heretic fallback before
+# the qwen36 tiers.
+- model_name: qwen38-heretic-lit
+  litellm_params:
+    model: openai/heretic
+    api_base: os.environ/NEXGATE_QWEN38_HERETIC_LIT_API_BASE
+    api_key: os.environ/NEXGATE_QWEN36_API_KEY
+    drop_params: true
+    max_tokens: 8192
+    timeout: 1800
+    num_retries: 1
+  model_info:
+    context_window: 65536
     supports_function_calling: true
     disable_background_health_check: true
 
