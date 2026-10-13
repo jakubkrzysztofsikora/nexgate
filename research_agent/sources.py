@@ -129,7 +129,7 @@ class SourceClient:
                 target = '[' + pinned + ']' if ':' in pinned else pinned
                 pinned_url = urlunsplit(('https', target, parts.path or '/', parts.query, ''))
                 # HTTPX connects only to the validated IP. TLS still verifies the original host.
-                async with client.stream('GET', pinned_url, headers={'Host': host, 'Accept-Encoding': 'identity'},
+                async with client.stream('GET', pinned_url, headers={'Host': host, 'Accept-Encoding': 'identity', 'User-Agent': 'LustroEditorialResearch/1.0'},
                                          extensions={'sni_hostname': host}) as response:
                     if response.status_code in {301, 302, 303, 307, 308}:
                         if hop == policy.max_redirects or 'location' not in response.headers:

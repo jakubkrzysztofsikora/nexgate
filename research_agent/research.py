@@ -8,7 +8,7 @@ from pydantic import Field, ValidationError
 
 from .models import ClusterResearchDraft, ResearchEvidenceRecord, ShortText, StrictModel
 from .policy import PolicyViolation, canonical_bytes, validate_draft, validate_request
-from .sources import fetch_source
+from .sources import SourcePolicyViolation, fetch_source
 from .capture import host_record_from_capture
 
 
@@ -77,7 +77,12 @@ async def research_cluster(
                 if url in seen or len(records) >= policy.max_sources:
                     continue
                 await checkpoint()
-                envelope = await fetch_source(url, policy, search.client)
+                try:
+                    envelope = await fetch_source(url, policy, search.client)
+                except SourcePolicyViolation:
+                    # A dead, blocked, or malformed search hit must not abort
+                    # the run; remaining sources still satisfy the budget.
+                    continue
                 await checkpoint()
                 archive = await evidence_store.put_content_addressed(envelope.content_bytes)
                 row = host_record_from_capture(envelope, archive)
