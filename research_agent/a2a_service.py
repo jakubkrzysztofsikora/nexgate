@@ -441,6 +441,15 @@ def validate_runtime_configuration(environment: Mapping[str, str]) -> None:
         raise RuntimeError("RESEARCH_ARCHIVE_ENDPOINT_URL must use HTTPS")
 
 
+async def sweep_expired_leases(store, interval_seconds: float = 30) -> None:
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await store.expire_leases()
+        except Exception:
+            logger.exception("lease sweep failed")
+
+
 def app_from_env() -> FastAPI:
     """Uvicorn factory for the opt-in private research service container."""
     validate_runtime_configuration(os.environ)
@@ -482,21 +491,14 @@ def app_from_env() -> FastAPI:
             checkpoint,
         )
 
+
     @asynccontextmanager
     async def runtime_lifespan(_app: FastAPI):
         await store.assert_schema_ready()
         worker_task = asyncio.create_task(run_worker(service, queue, configured_research))
         await service.recover_pending()
 
-        async def sweep_expired_leases() -> None:
-            while True:
-                await asyncio.sleep(30)
-                try:
-                    await store.expire_leases()
-                except Exception:
-                    logger.exception("lease sweep failed")
-
-        sweeper_task = asyncio.create_task(sweep_expired_leases())
+        sweeper_task = asyncio.create_task(sweep_expired_leases(store))
         try:
             yield
         finally:

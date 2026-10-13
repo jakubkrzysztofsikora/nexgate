@@ -46,3 +46,30 @@ async def _scenario(tmp_path):
         assert (await store.get(submitted.id)).state == "submitted"
     finally:
         await store.dispose()
+
+
+def test_sweeper_survives_expire_failures():
+    asyncio.run(_sweeper_scenario())
+
+
+async def _sweeper_scenario():
+    from research_agent.a2a_service import sweep_expired_leases
+
+    class FlakyStore:
+        def __init__(self):
+            self.calls = 0
+
+        async def expire_leases(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("db unavailable")
+
+    store = FlakyStore()
+    task = __import__("asyncio").create_task(sweep_expired_leases(store, interval_seconds=0.01))
+    await __import__("asyncio").sleep(0.06)
+    try:
+        assert not task.done(), "sweeper died on a failed sweep"
+        assert store.calls >= 2, "sweeper did not retry after failure"
+    finally:
+        task.cancel()
+        await __import__("asyncio").gather(task, return_exceptions=True)
