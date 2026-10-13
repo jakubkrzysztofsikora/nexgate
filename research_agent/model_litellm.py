@@ -112,4 +112,4 @@ class LiteLLMModel:
 
     async def synthesize(self, request, evidence, iteration, policy):
         return await self._structured(request, evidence, policy, ClusterResearchDraft,
-            'Produce a Polish cluster research draft. Preserve the reviewed claim identity and evidence-basis lane. Cite only provided records. Describe limitations. Every public sentence must be represented by atomic assertions; no unsupported verdicts or adverse inferences.', iteration)
+            'Produce a Polish cluster research draft. Preserve the reviewed claim identity and evidence-basis lane. Cite only provided records. Describe limitations. Every public sentence must be represented by atomic assertions; no unsupported verdicts or adverse inferences. Records that share one origin chain or republish the same wire do not corroborate each other.', iteration)
