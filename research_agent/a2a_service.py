@@ -484,11 +484,24 @@ def app_from_env() -> FastAPI:
         await store.assert_schema_ready()
         worker_task = asyncio.create_task(run_worker(service, queue, configured_research))
         await service.recover_pending()
+
+        async def sweep_expired_leases() -> None:
+            # Startup recovery alone leaves a deadline-expired run stuck in
+            # 'working' until the next restart: nothing re-examines the lease.
+            while True:
+                await asyncio.sleep(30)
+                try:
+                    await service.recover_pending()
+                except Exception:
+                    continue
+
+        sweeper_task = asyncio.create_task(sweep_expired_leases())
         try:
             yield
         finally:
-            worker_task.cancel()
-            await asyncio.gather(worker_task, return_exceptions=True)
+            for task in (worker_task, sweeper_task):
+                task.cancel()
+            await asyncio.gather(worker_task, sweeper_task, return_exceptions=True)
             await store.dispose()
 
     return create_app(service, bearer_token=bearer_token, lifespan=runtime_lifespan)
