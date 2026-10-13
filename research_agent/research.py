@@ -64,8 +64,13 @@ async def research_cluster(
         queries_used = 0
         for iteration in range(1, policy.max_iterations + 1):
             await checkpoint()
-            plan = await model.plan_queries(request, tuple(records.values()), policy)
-            plan = QueryPlan.model_validate(plan.model_dump() if isinstance(plan, QueryPlan) else plan)
+            try:
+                plan = await model.plan_queries(request, tuple(records.values()), policy)
+                plan = QueryPlan.model_validate(plan.model_dump() if isinstance(plan, QueryPlan) else plan)
+            except (PolicyViolation, ValidationError, ValueError):
+                if iteration == policy.max_iterations:
+                    raise
+                continue
             queries = list(plan.model_dump().values())[:policy.max_queries_per_iteration]
             await checkpoint()
             hits = await search.search(queries, policy, remaining_sources=policy.max_sources - len(records),
@@ -93,7 +98,7 @@ async def research_cluster(
                 candidate = await model.synthesize(request, tuple(records.values()), iteration, policy)
                 candidate = ClusterResearchDraft.model_validate(candidate.model_dump() if isinstance(candidate, ClusterResearchDraft) else candidate)
                 validate_draft(candidate, request, records, policy)
-            except (PolicyViolation, ValidationError):
+            except (PolicyViolation, ValidationError, ValueError):
                 if iteration == policy.max_iterations:
                     raise
                 continue
