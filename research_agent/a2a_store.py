@@ -303,7 +303,7 @@ class SQLAlchemyA2ATaskStore:
         task = await self.get(task_id)
         return task.state == "canceled" and task.lease_owner is None
 
-    async def recoverable(self) -> list[UUID]:
+    async def expire_leases(self) -> None:
         async with self.engine.begin() as connection:
             await connection.execute(
                 update(tasks).where(tasks.c.state == "working", tasks.c.lease_expires_at.is_not(None),
@@ -311,6 +311,10 @@ class SQLAlchemyA2ATaskStore:
                     state="failed", error="research worker lease expired; manual reconciliation required",
                     lease_owner=None, lease_expires_at=None, updated_at=self._clock())
             )
+
+    async def recoverable(self) -> list[UUID]:
+        await self.expire_leases()
+        async with self.engine.connect() as connection:
             rows = (await connection.execute(select(tasks.c.id).where(tasks.c.state == "submitted").order_by(tasks.c.created_at))).scalars().all()
         return [UUID(task_id) for task_id in rows]
 

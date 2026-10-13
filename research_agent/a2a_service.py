@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 import secrets
 from urllib.parse import quote_plus
@@ -11,6 +12,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -486,14 +489,12 @@ def app_from_env() -> FastAPI:
         await service.recover_pending()
 
         async def sweep_expired_leases() -> None:
-            # Startup recovery alone leaves a deadline-expired run stuck in
-            # 'working' until the next restart: nothing re-examines the lease.
             while True:
                 await asyncio.sleep(30)
                 try:
-                    await service.recover_pending()
+                    await store.expire_leases()
                 except Exception:
-                    continue
+                    logger.exception("lease sweep failed")
 
         sweeper_task = asyncio.create_task(sweep_expired_leases())
         try:
