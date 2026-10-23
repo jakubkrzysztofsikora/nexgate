@@ -1382,6 +1382,10 @@ try:
 
 		_original_maybe_inject_cache_control = AnthropicCacheControlHook.maybe_inject_cache_control
 
+		_inject_param_names = set(
+			inspect.signature(_original_maybe_inject_cache_control).parameters
+		)
+
 		def _patched_maybe_inject_cache_control(
 			messages, system, kwargs, model=None, custom_llm_provider=None, tools=None, api_base=None
 		):
@@ -1389,10 +1393,16 @@ try:
 				messages,
 				system,
 				kwargs,
-				model=model,
-				custom_llm_provider=custom_llm_provider,
-				tools=tools,
-				api_base=api_base,
+				**{
+					name: value
+					for name, value in (
+						("model", model),
+						("custom_llm_provider", custom_llm_provider),
+						("tools", tools),
+						("api_base", api_base),
+					)
+					if name in _inject_param_names
+				},
 			)
 			leftover = kwargs.get("cache_control_injection_points")
 			if leftover:
