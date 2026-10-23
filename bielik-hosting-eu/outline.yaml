@@ -1,0 +1,46 @@
+topic: EU sovereign hosting dla Bielik-7B (agentic, <=150 EUR/mies)
+topic_slug: bielik-hosting-eu
+created: 2026-10-21
+time_range: 2026-04 -> 2026-10
+
+goal: >
+  Wybrać hosting dla Bielik-Minitron-7B v3.0 (Q4_K_M, llama.cpp) pod agentic
+  harness (omp): TTFT przy 4-8k tok promptu (tool-schema), decode t/s,
+  cena miesieczna <=150 EUR, suwerennosc EU (firma EU + DC EU).
+
+items:
+  - id: scaleway-mac-mini-m2
+    name: Scaleway Apple silicon Mac mini M2 16GB (PAR-1)
+    why: najtanszy Apple-silicon w EU; operator pytaja o ~70 EUR — realnie 115 EUR
+  - id: scaleway-mac-mini-m4-16
+    name: Scaleway Mac mini M4 16GB (149 EUR)
+    why: prefill 80-150 t/s — najtanszy sensowny dla agentow?
+  - id: macstadium-m4-16
+    name: MacStadium M4 mini 16GB (149 USD, Dublin)
+    why: alternatywa Apple-silicon; US parent = CLOUD Act exposure
+  - id: koyeb-l4-scale-to-zero
+    name: Koyeb L4 0.70 USD/h scale-to-zero (Paryz)
+    why: GPU TTFT 1.5-3 s; per-second billing; cost przy idle-heavy agentic?
+  - id: gcore-gpu-cloud
+    name: Gcore GPU Cloud / AI Inference (LU)
+    why: serverless GPU, cennik tylko w konsoli — do zweryfikowania
+  - id: ovh-rtx5000-v100
+    name: OVH RTX 5000 16GB (0.60 USD/h) / V100 (0.77 USD/h), Gravelines
+    why: najtansze stałe GPU w EU od duzego providera
+  - id: contabo-netcup-gpu
+    name: Contabo / netcup GPU VPS
+    why: [status: likely-dead] — brak GPU w ofercie wg researchu; potwierdzic
+  - id: bielik-dflash-lever
+    name: Bielik-Minitron-7B-v3.0-DFlash (self-speculative decoding)
+    why: 1.3-2x t/s za darmo na dowolnym hoscie — mnoznik dla wszystkich items
+  - id: scaleway-generative-apis-serverless
+    name: Scaleway Generative APIs (serverless, Paryz)
+    why: managed API bez Bielika — czy mistral-small-24b za 0.15/0.35/M tok załatwia sprawę?
+  - id: ovh-ai-endpoints
+    name: OVHcloud AI Endpoints (managed, zero-retention, 99.5% SLA)
+    why: bez Bielika w katalogu — per-token vs self-host trade-off
+
+execution:
+  batch_size: 2
+  items_per_agent: 2
+  output_dir: results

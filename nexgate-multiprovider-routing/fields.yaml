@@ -1,0 +1,293 @@
+fields:
+  basic_info:
+    - name: provider
+      description: "Nazwa providera i produktu (np. Z.AI, Mistral, Scaleway, Munito, OpenCode Zen)."
+      detail_level: brief
+    - name: model_family
+      description: "Rodzina modeli (glm-5.x, claude-opus-5.x, gpt-5.6/6.x, qwen3.x, kimi-k3, minimax-m3, deepseek-v4)."
+      detail_level: brief
+    - name: provider_model_id
+      description: "Identyfikator modelu u providera w parametrze `model` litellm_params."
+      detail_level: brief
+    - name: public_alias
+      description: "Publiczny model_name w NexGate (katalog); aliasy model_group_alias osobno."
+      detail_level: brief
+    - name: deployment_group
+      description: "Grupa routingu — unikalna nazwa (osobny provider) czy powtorzony model_name (load balancing)."
+      detail_level: brief
+    - name: endpoint_hostname
+      description: "Host api_base (np. api.munito.ai, api.mistral.ai, api.scaleway.ai, openrouter.ai); endpoint uywany, nie marketingowy."
+      detail_level: brief
+    - name: deployment_records
+      description: "Lista rekordow per-trasa: alias, provider_model_id, endpoint, klasa uprawnien — alias/model/entitlement pozostaja sparowane."
+      detail_level: brief
+    - name: config_state
+      description: "Katalog / rendered / live-container / restart-pending (np. munito: klucz w .env.nexgate, brak w env kontenera do restartu)."
+      detail_level: brief
+  business_info:
+    - name: access_type
+      description: "subscription-oauth | coding-plan-key | api-credit | payg-key | free-tier | local | self-hosted."
+      detail_level: brief
+    - name: plan_name
+      description: "Nazwa planu/subskrypcji (Claude Max, ChatGPT Plus/Pro, GLM Coding Plan, Kimi Code, MiniMax M Plan) lub PAYG."
+      detail_level: brief
+    - name: credential_class
+      description: "Typ poświadczenia bez sekretu (OAuth token, plan key, PAYG key, SCW secret, brak)."
+      detail_level: brief
+    - name: quota_limits
+      description: "Limity użycia planu (liczby żądań/tokenów) z dokladnoscia zrodla."
+      detail_level: moderate
+    - name: quota_windows
+      description: "Okna odnowienia (5h, tygodniowa, miesieczna) i ich fazy."
+      detail_level: moderate
+    - name: reset_behavior
+      description: "Czy i kiedy liczniki sie resetuja; co przy wyczerpaniu (blokada vs przejscie na PAYG)."
+      detail_level: moderate
+    - name: remaining_quota_evidence
+      description: "Bezposredni dowod stanu quota (naglowki, dashboard, komunikaty) — brak = unknown."
+      detail_level: moderate
+    - name: rate_limit_policy
+      description: "Policy 429/limitow po stronie providera (RPM/TPM/kolejki) dla tej trasy."
+      detail_level: moderate
+    - name: permitted_usage_scope
+      description: "Czy warunki providera pozwolaja na obserwowane uzycie przez lokalny proxy/harness; cytat z terms."
+      detail_level: detailed
+    - name: account_sharing_rule
+      description: "Zasady wspoldzielenia konta/klucza (jedno konto = jeden uzytkownik? narzedzia firm trzecich?)."
+      detail_level: detailed
+    - name: overflow_billing
+      description: "Co biluje sie ponad plan (extra-use billing, przejscie na karte/PAYG) i w jakiej cenie."
+      detail_level: moderate
+    - name: input_price_per_million
+      description: "Cena inputu USD/1M tok (PAYG) lub n/d dla planu."
+      detail_level: moderate
+    - name: cached_input_price_per_million
+      description: "Cena cache-hit inputu USD/1M tam gdzie okreslona."
+      detail_level: moderate
+    - name: output_price_per_million
+      description: "Cena outputu USD/1M tok (PAYG) lub n/d dla planu."
+      detail_level: moderate
+    - name: region_price_delta
+      description: "Roznica cen regionow (np. Mistral eu vs us) jesli udokumentowana."
+      detail_level: moderate
+    - name: request_count
+      description: "Zliczone zadania z telemetrii (agregaty; wiersz SpendLog = proba upstream)."
+      detail_level: moderate
+    - name: upstream_attempt_count
+      description: "Liczba prob upstream (wiersze SpendLog) odrzezniona od zadan klienta."
+      detail_level: moderate
+    - name: success_failure_counts
+      description: "Rozklad statusow success/failure z agregatow."
+      detail_level: moderate
+    - name: input_output_tokens
+      description: "Sumy prompt/completion tokenow z telemetrii."
+      detail_level: moderate
+    - name: cached_input_tokens
+      description: "Sumy tokenow cache-hit (pole cache_hit / tokeny cached)."
+      detail_level: moderate
+    - name: logged_spend
+      description: "Suma spend z SpendLogs (USD); zero = nierozliczone, nie darmowe."
+      detail_level: moderate
+    - name: billing_source
+      description: "Skad cena pochodzi (cennik publiczny, dashboard, log) + data sprawdzenia."
+      detail_level: brief
+    - name: effective_cost_per_successful_request
+      description: "spend / liczba udanych prob — tylko jako agregat obserwowany, nie przewidywany."
+      detail_level: moderate
+    - name: invoice_reconciliation_status
+      description: "Czy logged_spend da sie uzgodnic z faktura/dashboardem providera; brak = unreconciled."
+      detail_level: moderate
+  technical_features:
+    - name: inference_region
+      description: "Region wykonania inferencji wg dowodow (eu-paris, global, unknown) — nie siedziba firmy."
+      detail_level: detailed
+    - name: endpoint_region_evidence
+      description: "Mechanizm pinowania regionu (parametr region, dedykowany endpoint) + cytat; region_name: eu w LiteLLM sam nie dowodzi."
+      detail_level: detailed
+    - name: control_plane_data_location
+      description: "Lokalizacja danych control-plane (rejestracja, logi konta) — oddzielnie od inferencji."
+      detail_level: detailed
+    - name: retention_and_zero_data_retention
+      description: "Retencja promptow/odpowiedzi po stronie providera; ZDR i warunki jego uzyskania."
+      detail_level: detailed
+    - name: regional_feature_limits
+      description: "Ograniczenia funkcji w danym regionie (modele, narzedzia, limity)."
+      detail_level: detailed
+    - name: workload_class
+      description: "Obserwowana klasa obciazenia (agentic coding, compaction, RP) — dowody slabe = uncertain."
+      detail_level: moderate
+    - name: request_frequency
+      description: "Czestotliwosc zadan na trase z telemetrii (na dzien/okno)."
+      detail_level: moderate
+    - name: input_output_token_profile
+      description: "Profil wejscie/wyjscie (mediana/percentyle) dla trasy."
+      detail_level: moderate
+    - name: tool_call_profile
+      description: "Udzial zadan z tools, mechanizm (native vs parse_tool_call_from_content)."
+      detail_level: moderate
+    - name: streaming_requirement
+      description: "Czy trasa wymaga streamingu (SSE) i jak znosi przerwania (stream_timeout 1800)."
+      detail_level: brief
+    - name: context_band
+      description: "Pasmo kontekstu (np. 128k/200k/262k/1M) z model_info i docs."
+      detail_level: brief
+    - name: metadata_evidence
+      description: "Jakie pola metadanych telemetrii uzupelniaja obraz (model_group, api_base, cache_hit)."
+      detail_level: moderate
+    - name: reasoning_support
+      description: "Czy model wspiera reasoning/thinking i jak sie go wymusza (reasoning_effort)."
+      detail_level: brief
+    - name: reasoning_effort_options
+      description: "Dostepne poziomy effort (low/medium/high) per model."
+      detail_level: brief
+    - name: tool_calling
+      description: "Wsparcie function calling na tej trasie (supports_function_calling + doswiadczenia)."
+      detail_level: brief
+    - name: structured_output
+      description: "Wsparcie JSON/schema output lub brak (drop_params maskuje?)."
+      detail_level: brief
+    - name: context_window
+      description: "Liczbowe okno kontekstu (dokladne z configu/dokumentacji)."
+      detail_level: moderate
+    - name: multimodal_support
+      description: "Wizja/audio na trasie (supports_vision itd.)."
+      detail_level: brief
+    - name: capability_constraints
+      description: "Ograniczenia (max_tokens, brak tool_choice, wylaczone parametry via additional_drop_params)."
+      detail_level: moderate
+    - name: group_semantics
+      description: "load-balance (ten sam model, wiele deploymentow) vs alias vs osobne grupy providerow."
+      detail_level: brief
+    - name: router_type
+      description: "zwykly router vs complexity_router (smart-router/general) vs prosty model."
+      detail_level: brief
+    - name: routing_strategy
+      description: "Strategia grupy (least-baseline, latency, usage-based) jesli ustawiona."
+      detail_level: brief
+    - name: fallback_stage
+      description: "Pozycja trasy w lancuchu (primary / secondary / terminal)."
+      detail_level: moderate
+    - name: provider_service_tier
+      description: "Tier serwisowy providera (priority/standard/flex u Munito; priority/flex u OpenAI API) — to nie subskrypcja."
+      detail_level: brief
+    - name: fallback_class
+      description: "Klasa hopa (same-credential, same-model-other-provider, cross-model, sink)."
+      detail_level: brief
+    - name: fallback_order
+      description: "Kolejnosc hopow dla grupy (dokladna lista z router_settings)."
+      detail_level: detailed
+    - name: retry_policy
+      description: "num_retries/timeout per deployment i ich interakcja (disable_cooldowns: true)."
+      detail_level: detailed
+    - name: cooldown_policy
+      description: "Jak brak cooldownow zmienia zachowanie przy 429 (natychmiastowy powrot do tej samej trasy)."
+      detail_level: detailed
+    - name: context_window_fallback
+      description: "Hopy context_window_fallbacks przy przeciazeniu kontekstu (np. claude base -> [1m])."
+      detail_level: detailed
+    - name: fallback_capability_delta
+      description: "Co traci zadanie po hopie (kontekst, narzedzia, jakosc) — per hop."
+      detail_level: detailed
+  performance_metrics:
+    - name: quality_by_workload
+      description: "Jakosc per obciazenie z dowodow niezaleznych (metodologia, workload, proba) — bez metodologii nie uzywac."
+      detail_level: detailed
+    - name: time_to_first_token_ms
+      description: "TTFT ms (agregaty Prometheus jesli dostepne; 15-dniowa retencja)."
+      detail_level: moderate
+    - name: time_to_first_output_ms
+      description: "Czas do pierwszego tokenu odpowiedzi wlasnej (completionStartTime - startTime)."
+      detail_level: moderate
+    - name: end_to_end_latency_ms
+      description: "request_duration_ms agregaty (p50/p95)."
+      detail_level: moderate
+    - name: generation_tokens_per_second
+      description: "completion_tokens / (endTime - completionStartTime) agregaty."
+      detail_level: moderate
+    - name: success_rate
+      description: "Udzial statusow success z telemetrii/metryk."
+      detail_level: moderate
+    - name: availability_sla
+      description: "Deklarowane SLA providera (99.x) i jego zakres."
+      detail_level: moderate
+    - name: rate_limit_rate
+      description: "Obserwowana czestosc 429/limit hitow na trase."
+      detail_level: moderate
+    - name: concurrency_limit
+      description: "Rownoleglosc dopuszczalna przez providera (max_parallel_requests, sesje)."
+      detail_level: moderate
+    - name: test_conditions
+      description: "Warunki pomiaru (model, kontekst, streaming, pora dnia) dla metryk wlasnych."
+      detail_level: detailed
+    - name: sample_size
+      description: "Liczba prob w probce; male probki oznaczac jawnie."
+      detail_level: moderate
+  competition_ecosystem:
+    - name: same_model_alternatives
+      description: "Inne trasy tego samego modelu (glm-5.2: ZAI/Mistral/Scaleway/GreenPT/qwencloud/opencode)."
+      detail_level: moderate
+    - name: equivalent_deployment_groups
+      description: "Grupy pokrywajace ten sam model — rozrozniaj load-balance od aliasow."
+      detail_level: moderate
+    - name: capability_deltas_to_alternatives
+      description: "Rzeczywiste roznice (region, cena, kontekst, narzedzia) wobec alternatyw."
+      detail_level: moderate
+  history:
+    - name: model_version
+      description: "Wersja/pinia modelu (qwen3.7-plus-2026-05-26 itp.)."
+      detail_level: brief
+    - name: availability
+      description: "Dostepnosc modelu/trasy w oknie badania."
+      detail_level: brief
+    - name: deprecation_status
+      description: "Zapowiedzi wycofania/aktualizacji modelu."
+      detail_level: brief
+    - name: config_revision
+      description: "Zmiany w litellm.yaml.tmpl dotykajace trasy w oknie (jezeli udokumentowane)."
+      detail_level: brief
+    - name: observed_at
+      description: "Data obserwacji telemetrycznej/konfiguracyjnej."
+      detail_level: brief
+    - name: source_url
+      description: "URL zrodla dowodu."
+      detail_level: brief
+    - name: source_type
+      description: "primary-doc | dashboard | telemetry | independent-benchmark | forum."
+      detail_level: brief
+    - name: publication_date
+      description: "Data publikacji/aktualizacji zrodla."
+      detail_level: brief
+    - name: checked_at
+      description: "Data weryfikacji przez badacza."
+      detail_level: brief
+    - name: evidence_strength
+      description: "Moc dowodu (primary > telemetry > independent > anegdota); niewiadome zostaja nieskorowane."
+      detail_level: brief
+  market_positioning:
+    - name: verified_checkbox_hits
+      description: "Lista trafionych kryteriow z cytatem na kazdy (EU inference, entitlement, terms, tools, cena...)."
+      detail_level: moderate
+    - name: verified_checkbox_count
+      description: "Licznik potwierdzonych trafien — zliczony, bez ukrytych wag."
+      detail_level: moderate
+    - name: eligibility
+      description: "eligible-subscription | eligible-payg | ineligible-terms | unknown — zgodnie z udokumentowanymi warunkami."
+      detail_level: detailed
+    - name: priority_tier
+      description: "Proponowany tier trasy (subscription-primary / subscription-secondary / payg-terminal / overflow / local)."
+      detail_level: brief
+    - name: tradeoffs
+      description: "Zachowane remisy i kompromisy (np. EU pinning vs latency; plan quota vs PAYG koszt)."
+      detail_level: detailed
+
+uncertain:
+  - "niepelne pokrycie historyczne (2026-04-23..2026-07-16 brak danych; raporty 2026-07-17..2026-09-07 z lukami 07-21..26 i 08-01..02)"
+  - "pokrycie wierszy 2026-09-07..2026-09-12 niezweryfikowane (metadane bez body)"
+  - "dni 2026-10-14 i 2026-10-15 — brak zarchiwizowanych wierszy; nie tlumaczyc jako zerowego uzycia"
+  - "waznosc zero-spend w wyswietlanych grupach (nierozliczone)"
+  - "evidence dla workload_class (bez inspectorow tresci zadan)"
+  - "posiadanie API entitlement (klucze bez dashboardu; status niepewny)"
+  - "zgodnosc terms z obserwowanym uzyciem proxy (dla OAuth/planow)"
+  - "dowody regionu/data-scope (region_name: eu nie wystarcza)"
+  - "porownywalnosc benchmarkow (rozne workloady/procby)"
+  - "limitacje sample_size (4 dni Postgres; 15d Prometheus; 45 raportow dziennych bez latencji)"

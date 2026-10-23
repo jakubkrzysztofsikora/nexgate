@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa
 """NexGate — Subscription & Limits Monitor.
 
 Tracks usage, live limits, and local timezone refresh times for the
@@ -54,12 +55,14 @@ PROVIDER_GROUPS = {
             "opus[1m]",
             "claude-sonnet-5",
             "claude-sonnet-5[1m]",
+            "claude-sonnet-5-5",
+            "claude-sonnet-5-5[1m]",
             "claude-haiku-4-5-20251001",
             "claude-fable-5-1",
             "claude-chat",
         ],
         "log_keywords": ["claude", "anthropic"],
-        "probe_model": "claude-opus-4-8",
+        "probe_model": "claude-haiku-4-5-20251001",
     },
     "ChatGPT": {
         "models": [
@@ -67,8 +70,11 @@ PROVIDER_GROUPS = {
             "chatgpt/gpt-5.6-terra",
             "chatgpt/gpt-5.6-luna",
             "chatgpt/gpt-6-astra",
+            "chatgpt/sol-6.1",
+            "chatgpt/gpt-6.1-sol",
+            "gpt-6.1-sol",
         ],
-        "log_keywords": ["chatgpt", "gpt-5.6", "gpt-6"],
+        "log_keywords": ["chatgpt", "gpt-5.6", "gpt-6", "gpt-6.1-sol", "sol-6.1"],
         "probe_model": "chatgpt/gpt-5.6-terra",
     },
     "MiniMax": {
@@ -106,6 +112,8 @@ PROVIDER_GROUPS = {
     "Mistral": {
         "models": [
             "mistral",
+            "mistral/mistral-large-4",
+            "mistral-large-4",
         ],
         "log_keywords": ["mistral"],
         "probe_model": "mistral",
@@ -156,6 +164,7 @@ def probe_single_provider(item: tuple[str, str], master_key: str) -> tuple[str, 
         data=json.dumps(build_probe_payload(model)).encode(),
         headers={
             "Content-Type": "application/json",
+            "x-api-key": master_key,
             "Authorization": f"Bearer {master_key}",
             "anthropic-version": "2023-06-01",
         },

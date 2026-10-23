@@ -1,0 +1,106 @@
+{
+  "checked": "2026-10-22",
+  "providers": [
+    {
+      "name": "Artnet.pl",
+      "url": "https://www.artnet.pl/serwery-gpu/",
+      "gpus_marketed": [
+        "RTX 5090",
+        "RTX 6000"
+      ],
+      "public_pricing": false,
+      "model": "dedicated server, quote via contact/configurator",
+      "verdict": "RFQ required; no hourly list prices published"
+    },
+    {
+      "name": "Polcom AI Cloud",
+      "url": "https://polcom.com.pl/uslugi/polcom-ai-cloud/iaas-z-gpu/",
+      "gpus_marketed": [
+        "enterprise AI cloud (unspecified, quote-based)"
+      ],
+      "public_pricing": false,
+      "model": "enterprise IaaS, sales contact",
+      "verdict": "RFQ required; enterprise-focused, unlikely per-hour spot"
+    },
+    {
+      "name": "CloudFero waw3-1",
+      "url": "https://www.cloudferro.com/pl/cennik/tabele-cenowe/waw3-1-cloud/maszyny-wirtualne-vm-z-gpu/",
+      "gpus_marketed": [
+        "RTX A6000 vGPU slices"
+      ],
+      "public_pricing": true,
+      "currency": "EUR",
+      "price_basis": "Excluding VAT; pay-per-use billed hourly; monthly, half-year and annual fixed commitments",
+      "rows": [
+        {
+          "flavor": "vm.a6000.1",
+          "vcpu": 2,
+          "ram_gb": 14,
+          "vgpu_gb": 6,
+          "pay_per_hour": 0.51,
+          "monthly_commit": 349.44,
+          "half_year_commit_monthly": 284.69,
+          "annual_commit_monthly": 205.56
+        },
+        {
+          "flavor": "vm.a6000.2",
+          "vcpu": 4,
+          "ram_gb": 28,
+          "vgpu_gb": 12,
+          "pay_per_hour": 1.01,
+          "monthly_commit": 698.89,
+          "half_year_commit_monthly": 569.39,
+          "annual_commit_monthly": 411.11
+        },
+        {
+          "flavor": "vm.a6000.4",
+          "vcpu": 8,
+          "ram_gb": 56,
+          "vgpu_gb": 24,
+          "pay_per_hour": 2.03,
+          "monthly_commit": 1397.78,
+          "half_year_commit_monthly": 1138.78,
+          "annual_commit_monthly": 822.22
+        },
+        {
+          "flavor": "vm.a6000.8",
+          "vcpu": 16,
+          "ram_gb": 112,
+          "vgpu_gb": 48,
+          "pay_per_hour": 4.05,
+          "monthly_commit": 2795.56,
+          "half_year_commit_monthly": 2277.56,
+          "annual_commit_monthly": 1644.44
+        }
+      ],
+      "verdict": "Corrected from the official price table: the figures are EUR, not PLN. vm.a6000.1 costs €0.51/hour or €349.44/month for 6GB vGPU; suitable for Bielik Q4 only with tight KV headroom. Gemma 4 12B 8-bit needs the 24GB vm.a6000.4 (€2.03/hour; €822.22/month on annual commitment) for practical context headroom. 2 vCPU x86 prefill is a bottleneck."
+    },
+    {
+      "name": "COIG GPU-as-a-Service",
+      "url": "https://www.coig.pl/gpu-as-a-service-srodowisko-ai-ml-w-trybie-multiuser/",
+      "gpus_marketed": [
+        "NVIDIA with MIG, multiuser container slices"
+      ],
+      "public_pricing": false,
+      "model": "multiuser GPU container environments, sales quote",
+      "verdict": "RFQ required; MIG-slice model similar to CloudFero vGPU; enterprise sales motion"
+    },
+    {
+      "name": "UpCloud (incl. pl-waw-1)",
+      "url": "https://upcloud.com/global/products/gpu-servers",
+      "gpus_marketed": [
+        "L4 (3x configs ~$2.13-2.56/h)",
+        "other models from $0.89/GPU/h spot"
+      ],
+      "public_pricing": true,
+      "model": "per-GPU-hour plans, monthly estimate = hourly x 672",
+      "verdict": "Real prices, Warsaw region available, but 7-20x CloudFero's vm.a6000.1 for comparable VRAM"
+    }
+  ],
+  "conclusion": "Poland sweep final: CloudFero waw3-1 only real winner (vm.a6000.1 ~EUR 0.12/h public). UpCloud Warsaw = real but premium. Artnet/Polcom/COIG/Hostiko quote-only. Order: macstudio POC -> CloudFero vm.a6000.1 -> Gcore L40S -> UpCloud L4.",
+  "hostiko": {
+    "url": "https://hostiko.network/en/vps#waw-r9",
+    "public_pricing": false,
+    "note": "Ryzen 9 9950 CPU VPS + RTX 5090 AI/ML VPS page; prices JS-rendered client-side, not fetchable statically. RFQ."
+  }
+}

@@ -1,0 +1,55 @@
+topic: NexGate multi-provider routing
+topic_slug: nexgate-multiprovider-routing
+created: 2026-10-23
+time_range: 2026-04-23 -> 2026-10-23
+
+goal: >
+  Porownac aktywne i katalogowe trasy LiteLLM (NexGate) pod wzgledem: dowodow
+  EU inference, realnych uprawnien subskrypcyjnych vs PAYG, dopasowania do
+  obciazen reasoningowych i tool-calling, szybkosci, niezawodnosci, ceny
+  pay-per-use oraz zaobserwowanego uzycia w oknie 2026-04-23 -> 2026-10-23.
+  Rekomendacja projektu tras (grupy/aliasy/fallbacki) powstaje po zebraniu
+  dowodow; nie jest czescia schematu.
+
+scope_limits:
+  - nie czytac body archiwizowanych obiektow S3 (12.87 GB) — tylko listing i metadane logu
+  - nie inspekcjonowac tresci promptow/odpowiedzi (SpendLogs: tylko agregaty tokenow/kosztow/timingu)
+  - dni bez danych (2026-10-14, 2026-10-15) nie sa zerowym uzyciem
+  - brak pokrycia 2026-04-23..2026-07-16 (raporty od 2026-07-17) — nie twierdzic o pelnych 6 miesiacach
+  - pokrycie wierszy 2026-09-07..2026-09-12 niezweryfikowane z samych metadanych
+  - SpendLog wiersz = proba upstream, nie osobne zadanie klienta
+  - zero spend w swiezych grupach = nierozliczone, nie darmowe
+
+items:
+  - id: anthropic-claude-code-oauth
+    name: Anthropic Claude Code OAuth routes
+    why: Verify route enablement, same-model credential fallback, and subscription scope.
+  - id: openai-chatgpt-oauth
+    name: OpenAI ChatGPT OAuth routes
+    why: Distinguish subscription-backed routes from separately billed API access.
+  - id: zai-glm-coding-plan
+    name: Z.AI GLM Coding Plan routes
+    why: Verify plan-specific quota endpoints versus general API credentials.
+  - id: alibaba-model-studio
+    name: Alibaba Model Studio routes
+    why: Compare Coding Plan and PAYG routes, model eligibility, quota, key/base URL, and permitted use.
+  - id: kimi-code-subscription
+    name: Kimi Code subscription routes
+    why: Verify quota windows and extra-use billing across Kimi/K3 routes.
+  - id: minimax-m-plan-api
+    name: MiniMax M Plan and API routes
+    why: Distinguish Subscription Keys from PAYG keys; include minimax-m3 usage.
+  - id: mistral-regional-api
+    name: Mistral regional API routes
+    why: Verify EU endpoint evidence and per-token funding for Mistral models and GLM aliases.
+  - id: eu-alternatives-munito
+    name: EU alternatives and configured Munito route
+    why: Assess Scaleway and CoopForge/Bielik; treat Munito as configured and restart-pending, and compare its global route against its possible EU endpoint.
+  - id: other-providers-local-overflow
+    name: Other configured providers and local/overflow routes
+    why: Cover OpenCode, OpenRouter, NVIDIA, GreenPT, Cloudflare, DeepSeek, PSYLLM, local/free GPU, and RunPod paid overflow.
+
+execution:
+  batch_size: 3
+  items_per_agent: 3
+  output_dir: ./results

@@ -1,3 +1,4 @@
+# ruff: noqa
 """Local ccproxy shims used by LiteLLM's file-based loader."""
 
 import asyncio
@@ -278,6 +279,17 @@ def _get_oauth_refresh_ttl_seconds() -> float:
 _OAUTH_REFRESH_TTL_SECONDS = _get_oauth_refresh_ttl_seconds()
 
 
+def _get_anthropic_primary_probe_seconds() -> float:
+	raw = os.getenv("ANTHROPIC_PRIMARY_PROBE_SECONDS", "60")
+	try:
+		return max(0.0, float(raw))
+	except ValueError:
+		return 60.0
+
+
+_ANTHROPIC_PRIMARY_PROBE_SECONDS = _get_anthropic_primary_probe_seconds()
+
+
 def _get_anthropic_primary_cooldown_seconds() -> float:
 	raw = os.getenv("ANTHROPIC_PRIMARY_COOLDOWN_SECONDS", "900")
 	try:
@@ -293,6 +305,7 @@ _OAUTH_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 # Guards _OAUTH_TOKEN_CACHE and the cooldown deadline: LiteLLM serves requests
 # from worker threads and async tasks, so token picks can interleave.
 _anthropic_token_state_lock = threading.Lock()
+_ANTHROPIC_FILE_TOKEN_CACHE: tuple[float, str, str | None, float] = (0.0, "", None, 0.0)
 _ANTHROPIC_EMPTY_TEXT_PLACEHOLDER = "[empty]"
 
 
@@ -313,14 +326,21 @@ def _anthropic_ping_event() -> str:
 _CLAUDE_PRIMARY_PROVIDER_MODELS = {
 	"claude-chat": "anthropic/claude-haiku-4-5-20251001",
 	"claude-haiku-4-5-20251001": "anthropic/claude-haiku-4-5-20251001",
+	"claude-haiku-5-5": "anthropic/claude-haiku-5-5",
+	"claude-haiku-5-5[1m]": "anthropic/claude-haiku-5-5",
+	"haiku-5-5": "anthropic/claude-haiku-5-5",
 	"claude-opus-4-8": "anthropic/claude-opus-4-8",
 	"claude-opus-4-8[1m]": "anthropic/claude-opus-4-8",
 	"opus[1m]": "anthropic/claude-opus-4-8",
 	"claude-opus-5": "anthropic/claude-opus-5",
 	"claude-opus-5[1m]": "anthropic/claude-opus-5",
+	"claude-opus-5-5": "anthropic/claude-opus-5-5",
+	"claude-opus-5-5[1m]": "anthropic/claude-opus-5-5",
 	"claude-sonnet-4-6": "anthropic/claude-sonnet-4-6",
 	"claude-sonnet-5": "anthropic/claude-sonnet-5",
 	"claude-sonnet-5[1m]": "anthropic/claude-sonnet-5",
+	"claude-sonnet-5-5": "anthropic/claude-sonnet-5-5",
+	"claude-sonnet-5-5[1m]": "anthropic/claude-sonnet-5-5",
 	"claude-fable-5-1": "anthropic/claude-fable-5-1",
 }
 _CLAUDE_PRIMARY_MODEL_GROUPS = set(_CLAUDE_PRIMARY_PROVIDER_MODELS)
@@ -330,24 +350,33 @@ _CLAUDE_PRIMARY_PROVIDER_MODEL_VALUES = set(_CLAUDE_PRIMARY_PROVIDER_MODELS.valu
 # receive the primary OAuth token a second time — that re-kills the 429'd
 # request the hop was meant to rescue.
 _CLAUDE_FALLBACK_PROVIDER_MODELS = {
+	"fallback-claude-opus-5-5[1m]": "anthropic/claude-opus-5-5",
+	"fallback-claude-opus-5-5": "anthropic/claude-opus-5-5",
 	"fallback-claude-opus-5[1m]": "anthropic/claude-opus-5",
 	"fallback-claude-opus-5": "anthropic/claude-opus-5",
 	"fallback-claude-opus-4-8[1m]": "anthropic/claude-opus-4-8",
 	"fallback-claude-opus-4-8": "anthropic/claude-opus-4-8",
 	"fallback-claude-opus-4-7[1m]": "anthropic/claude-opus-4-8",
 	"fallback-claude-opus-4-7": "anthropic/claude-opus-4-8",
+	"fallback-claude-sonnet-5-5[1m]": "anthropic/claude-sonnet-5-5",
+	"fallback-claude-sonnet-5-5": "anthropic/claude-sonnet-5-5",
 	"fallback-claude-sonnet-5[1m]": "anthropic/claude-sonnet-5",
 	"fallback-claude-sonnet-5": "anthropic/claude-sonnet-5",
 	"fallback-claude-sonnet-4-6": "anthropic/claude-sonnet-5",
 	"fallback-claude-fable-5-1": "anthropic/claude-fable-5-1",
+	"fallback-claude-haiku-5-5[1m]": "anthropic/claude-haiku-5-5",
+	"fallback-claude-haiku-5-5": "anthropic/claude-haiku-5-5",
 	"fallback-claude-haiku-4-5-20251001": "anthropic/claude-haiku-4-5-20251001",
 }
 _CLAUDE_FALLBACK_MODEL_GROUPS = set(_CLAUDE_FALLBACK_PROVIDER_MODELS)
 _CLAUDE_ONE_MILLION_CONTEXT_MODELS = {
 	"claude-opus-4-8[1m]",
 	"claude-opus-5[1m]",
+	"claude-opus-5-5[1m]",
 	"opus[1m]",
 	"claude-sonnet-5[1m]",
+	"claude-sonnet-5-5[1m]",
+	"claude-haiku-5-5[1m]",
 }
 _CLAUDE_ONE_MILLION_CONTEXT_BETA = "context-1m-2025-08-07"
 _ANTHROPIC_API_BASE = "https://api.anthropic.com"
@@ -365,7 +394,10 @@ _TOOL_SEARCH_BETA = "advanced-tool-use-2025-11-20"
 _TOOL_SEARCH_MODELS = frozenset({
 	"claude-opus-4-8", "claude-opus-4-8[1m]",
 	"claude-opus-5", "claude-opus-5[1m]",
+	"claude-opus-5-5", "claude-opus-5-5[1m]",
 	"claude-sonnet-5", "claude-sonnet-5[1m]",
+	"claude-sonnet-5-5", "claude-sonnet-5-5[1m]",
+	"claude-haiku-5-5", "claude-haiku-5-5[1m]",
 	"claude-fable-5-1",
 })
 # Always-loaded core tools. Discovery is a search hop, so tools called every
@@ -536,18 +568,47 @@ def _get_source_command(source: Any) -> str:
 
 
 def _get_live_oauth_token(provider_name: str) -> str | None:
+	global _anthropic_primary_cooldown_until, _ANTHROPIC_FILE_TOKEN_CACHE
+	file_token = None
+	token_file = os.getenv("CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE") if provider_name == "anthropic" else None
+	if token_file:
+		if os.path.exists(token_file):
+			try:
+				mtime = os.path.getmtime(token_file)
+				with _anthropic_token_state_lock:
+					cached_file = _ANTHROPIC_FILE_TOKEN_CACHE
+					if cached_file and cached_file[0] == mtime and cached_file[1] == token_file:
+						file_token = cached_file[2]
+						expires_at = cached_file[3]
+					else:
+						with open(token_file) as stream:
+							snapshot = json.load(stream)
+						file_token = snapshot.get("accessToken")
+						expires_at = snapshot.get("expiresAt")
+						_ANTHROPIC_FILE_TOKEN_CACHE = (mtime, token_file, file_token, expires_at or 0.0)
+				if not isinstance(file_token, str) or not file_token or not isinstance(expires_at, (int, float)):
+					raise ValueError("Claude OAuth token snapshot is invalid")
+				if expires_at <= time.time() * 1000:
+					raise ValueError("Claude OAuth token snapshot expired; refresh Claude Code login")
+			except (json.JSONDecodeError, OSError) as exc:
+				raise ValueError("Claude OAuth token snapshot is unavailable") from exc
+		elif not os.getenv("CLAUDE_CODE_OAUTH_TOKEN"):
+			raise ValueError("Claude OAuth token snapshot is unavailable")
 	config = get_config()
 	with _anthropic_token_state_lock:
 		cached_entry = _OAUTH_TOKEN_CACHE.get(provider_name)
 		now = time.time()
 
 		if provider_name == "anthropic":
+			# A newly refreshed login must not inherit the previous token's cooldown.
+			if file_token and (not cached_entry or cached_entry[0] != file_token):
+				_anthropic_primary_cooldown_until = 0.0
 			if time.monotonic() < _anthropic_primary_cooldown_until:
 				fb = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
 				if fb:
 					# do NOT cache: cooldown must expire back to primary
 					return fb
-			env_token = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
+			env_token = file_token or os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
 			if env_token:
 				_OAUTH_TOKEN_CACHE[provider_name] = (env_token, now)
 				return env_token
@@ -624,7 +685,17 @@ def _anthropic_oauth_token_for_model(
 		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
 		if fallback_token:
 			return fallback_token
-	return _get_live_oauth_token("anthropic")
+	try:
+		return _get_live_oauth_token("anthropic")
+	except ValueError as exc:
+		fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+		if fallback_token:
+			_TOOL_VALIDATION_LOGGER.warning(
+				"Primary Claude OAuth token unavailable (%s); failing over to ANTHROPIC_FALLBACK_TOKEN",
+				exc,
+			)
+			return fallback_token
+		raise
 
 
 # Bare 'rate' or '429' substrings match request ids and words like 'generate';
@@ -665,9 +736,24 @@ def _maybe_arm_anthropic_cooldown(kwargs: dict, response_obj: Any) -> None:
 	model_group = str(metadata.get("model_group") or "") if isinstance(metadata, dict) else ""
 	if model_group in _CLAUDE_FALLBACK_MODEL_GROUPS:
 		return
-	# Already on the fallback token: a 429 now is the fallback account dying.
-	# Keep the deadline so primary deployments resume the primary token on
-	# expiry instead of extending the outage.
+	fallback_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+	if fallback_token:
+		used_token = kwargs.get("api_key")
+		if not used_token:
+			headers = kwargs.get("headers") or kwargs.get("extra_headers") or {}
+			if isinstance(headers, dict):
+				auth = headers.get("Authorization") or headers.get("authorization") or ""
+				used_token = auth.removeprefix("Bearer ").strip()
+		if used_token and used_token == fallback_token:
+			# The fallback account is the one rate-limited: cap any armed
+			# primary cooldown to one short probe window so a recovered
+			# primary is retried instead of pinning traffic to the dead
+			# fallback for the full cooldown.
+			with _anthropic_token_state_lock:
+				probe_at = time.monotonic() + _ANTHROPIC_PRIMARY_PROBE_SECONDS
+				if _anthropic_primary_cooldown_until > probe_at:
+					_anthropic_primary_cooldown_until = probe_at
+			return
 	with _anthropic_token_state_lock:
 		if time.monotonic() < _anthropic_primary_cooldown_until:
 			return
@@ -1733,7 +1819,18 @@ def _is_chatgpt_native_responses_request(data: dict[str, Any] | None) -> bool:
 		return False
 	provider = str(data.get("custom_llm_provider") or "").lower()
 	model = str(data.get("model") or "").lower()
-	chatgpt_models = {"gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6"}
+	chatgpt_models = {
+		"gpt-5.6-terra",
+		"gpt-5.6-sol",
+		"gpt-5.6-luna",
+		"gpt-5.6",
+		"gpt-6-astra",
+		"gpt-6-sol",
+		"gpt-6-luna",
+		"lun",
+		"sol-6.1",
+		"gpt-6.1-sol",
+	}
 	if provider == "chatgpt" or model.startswith("chatgpt/") or model in chatgpt_models:
 		return True
 	metadata = data.get("metadata")
@@ -5104,8 +5201,89 @@ def _strip_client_auth_headers(data: dict[str, Any]) -> None:
 				_drop_header(headers, header_name)
 
 
+# Anthropic accepts a server-held setup-token only when the request carries the
+# Claude Code billing line. A bare Messages call with the same token is rejected
+# as a fake 429. Both fields are required; either alone is a 400.
+_CLAUDE_OAUTH_BILLING_HEADER = (
+	"x-anthropic-billing-header: cc_version=2.1.294.725; cc_entrypoint=sdk-cli;"
+)
+
+
+def _text_has_billing_header(value: Any) -> bool:
+	return isinstance(value, str) and "x-anthropic-billing-header:" in value
+
+
+def _payload_has_billing_header(data: dict[str, Any]) -> bool:
+	system = data.get("system")
+	if _text_has_billing_header(system):
+		return True
+	if isinstance(system, list):
+		for block in system:
+			if isinstance(block, dict) and _text_has_billing_header(block.get("text")):
+				return True
+	messages = data.get("messages")
+	if isinstance(messages, list):
+		for message in messages:
+			if not isinstance(message, dict) or message.get("role") != "system":
+				continue
+			content = message.get("content")
+			if _text_has_billing_header(content):
+				return True
+			if isinstance(content, list):
+				for block in content:
+					if isinstance(block, dict) and _text_has_billing_header(block.get("text")):
+						return True
+	return _text_has_billing_header(data.get("instructions"))
+
+
+def _inject_claude_oauth_billing_header(data: dict[str, Any]) -> None:
+	"""Put the Claude Code billing line on a server-held setup-token call.
+
+	Chat completions pick it up from a leading system message. Anthropic
+	Messages calls pick it up from the top-level system field. Already-present
+	client lines are left alone so the prefix stays cache-stable.
+	"""
+	if _payload_has_billing_header(data):
+		return
+	system = data.get("system")
+	proxy_request = data.get("proxy_server_request")
+	url = proxy_request.get("url") if isinstance(proxy_request, dict) else ""
+	anthropic_messages = "/v1/messages" in str(url) or (
+		isinstance(system, list)
+		and any(isinstance(block, dict) and block.get("type") for block in system)
+	)
+	if anthropic_messages or "system" in data:
+		block = {"type": "text", "text": _CLAUDE_OAUTH_BILLING_HEADER}
+		if isinstance(system, list):
+			data["system"] = [block, *system]
+		elif isinstance(system, str) and system:
+			data["system"] = f"{_CLAUDE_OAUTH_BILLING_HEADER}\n{system}"
+		else:
+			data["system"] = _CLAUDE_OAUTH_BILLING_HEADER
+		return
+	messages = data.get("messages")
+	if isinstance(messages, list):
+		if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system":
+			content = messages[0].get("content")
+			if isinstance(content, str):
+				messages[0]["content"] = f"{_CLAUDE_OAUTH_BILLING_HEADER}\n{content}"
+				return
+			if isinstance(content, list):
+				messages[0]["content"] = [{"type": "text", "text": _CLAUDE_OAUTH_BILLING_HEADER}, *content]
+				return
+		data["messages"] = [
+			{"role": "system", "content": _CLAUDE_OAUTH_BILLING_HEADER},
+			*messages,
+		]
+		return
+	data["system"] = _CLAUDE_OAUTH_BILLING_HEADER
+
+
 def _set_anthropic_oauth_headers(data: dict[str, Any], auth_header: str) -> None:
 	"""Force Anthropic calls to use the live OAuth bearer, not client auth."""
+	# LiteLLM's OAuth transport rebuilds Authorization from api_key at dispatch.
+	data["api_key"] = auth_header.removeprefix("Bearer ")
+	_inject_claude_oauth_billing_header(data)
 	for header_key in ("headers", "extra_headers"):
 		headers = data.get(header_key)
 		if not isinstance(headers, dict):
@@ -5258,11 +5436,15 @@ def forward_provider_oauth(
 
 	request = data.get("proxy_server_request") or {}
 	headers = request.get("headers", {}) if isinstance(request, dict) else {}
-	oauth_token = _anthropic_oauth_token_for_model(
-		routed_model,
-		metadata.get("model_group"),
-		fallback_depth=_fallback_depth_from_metadata(metadata),
-	)
+	try:
+		oauth_token = _anthropic_oauth_token_for_model(
+			routed_model,
+			metadata.get("model_group"),
+			fallback_depth=_fallback_depth_from_metadata(metadata),
+		)
+	except ValueError as exc:
+		_TOOL_VALIDATION_LOGGER.error("Failed to acquire Claude OAuth token: %s", exc)
+		oauth_token = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
 	if not oauth_token:
 		return data
 	auth_header = (

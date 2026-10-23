@@ -19,6 +19,7 @@ and proves gateway transport, not a live research provider's answer quality.
 | `qwencloud/qwen3.8-max` | `NEXGATE_QWENCLOUD_QWEN3_8_MAX_API_BASE`, `QWENCLOUD_API_KEY` |
 | `qwencloud/qwen3.7-plus` | `NEXGATE_QWENCLOUD_QWEN3_7_PLUS_API_BASE`, `QWENCLOUD_API_KEY` |
 | `qwencloud/deepseek-v4-flash` | `NEXGATE_QWENCLOUD_DEEPSEEK_V4_FLASH_API_BASE`, `QWENCLOUD_API_KEY` |
+| `qwencloud/deepseek-v4.1-flash` | `NEXGATE_QWENCLOUD_DEEPSEEK_V4_1_FLASH_API_BASE`, `QWENCLOUD_API_KEY` |
 | `qwencloud/deepseek-v4-pro` | `NEXGATE_QWENCLOUD_DEEPSEEK_V4_PRO_API_BASE`, `QWENCLOUD_API_KEY` |
 | `qwencloud-payg/qwen3.7-plus-2026-05-26` | `NEXGATE_QWENCLOUD_PAYG_QWEN3_7_PLUS_2026_05_26_API_BASE`, `QWEN_PAYASYOUGO_API_KEY` |
 | `qwencloud-payg/qwen3.7-plus` | `NEXGATE_QWENCLOUD_PAYG_QWEN3_7_PLUS_API_BASE`, `QWEN_PAYASYOUGO_API_KEY` |
@@ -39,7 +40,7 @@ and proves gateway transport, not a live research provider's answer quality.
 | `deepseek-v4-pro` | `DEEPSEEK_API_KEY`, `NEXGATE_DEEPSEEK_V4_PRO_API_BASE` |
 | `deepseek-v4-pro[1m]` | `DEEPSEEK_API_KEY`, `NEXGATE_DEEPSEEK_V4_PRO_1M_API_BASE` |
 | `gemma` | `NEXGATE_GEMMA_API_BASE` |
-| `bielik` | `NEXGATE_BIELIK_API_BASE` |
+| `coopforge/bielik-minitron-7b` | `NEXGATE_COOPFORGE_BIELIK_API_BASE`, `NEXGATE_COOPFORGE_BIELIK_API_KEY` (alias: `bielik`) |
 | `psyllm-4b` | `NEXGATE_PSYLLM_4B_API_BASE`, `PSYLLM_SERVER_API_KEY` |
 | `glm-5.1` | `NEXGATE_GLM_5_1_API_BASE`, `ZAI_API_KEY` |
 | `glm-5.2` | `NEXGATE_GLM_5_2_API_BASE`, `ZAI_API_KEY` |
@@ -49,28 +50,40 @@ and proves gateway transport, not a live research provider's answer quality.
 | `claude-opus-4-8` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_8_API_BASE` |
 | `claude-opus-4-7[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_1M_API_BASE` |
 | `claude-opus-4-7` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_API_BASE` |
+| `claude-sonnet-5-5[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_5_1M_API_BASE` |
+| `claude-sonnet-5-5` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_5_API_BASE` |
 | `claude-sonnet-5[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_1M_API_BASE` |
 | `claude-sonnet-4-6` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_SONNET_4_6_API_BASE` |
 | `claude-sonnet-5` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_API_BASE` |
 | `sonnet` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_SONNET_API_BASE` |
 | `claude-fable-5-1` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_FABLE_5_1_API_BASE` |
 | `claude-opus-5[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_1M_API_BASE` |
+| `claude-opus-5-5[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_5_1M_API_BASE` |
+| `claude-opus-5-5` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_5_API_BASE` |
 | `claude-opus-5` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_API_BASE` |
 | `claude-haiku-4-5-20251001` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE` |
+| `claude-haiku-5-5[1m]` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_HAIKU_5_5_1M_API_BASE` |
+| `claude-haiku-5-5` | `CLAUDE_CODE_OAUTH_TOKEN`, `NEXGATE_CLAUDE_HAIKU_5_5_API_BASE` |
 | `kimi` | `KIMI_CODE_API_BASE`, `KIMI_CODE_API_KEY` |
 | `kimi-k3` | `KIMI_CODE_API_BASE`, `KIMI_CODE_API_KEY` |
 | `minimax-m3` | `MINIMAX_API_KEY`, `NEXGATE_MINIMAX_M3_API_BASE` |
 | `mistral` | `MISTRAL_API_KEY` |
 | `scaleway/gpt-oss` | `NEXGATE_SCALEWAY_GPT_OSS_API_BASE`, `SCW_SECRET_KEY` |
-| `scaleway/glm-5.2` | `NEXGATE_SCALEWAY_GLM_5_2_API_BASE`, `SCW_SECRET_KEY` |
+| `scaleway/glm-5.3` | `NEXGATE_SCALEWAY_GLM_5_3_API_BASE`, `SCW_SECRET_KEY` |
 | `scaleway/gemma-4` | `NEXGATE_SCALEWAY_GEMMA_4_API_BASE`, `SCW_SECRET_KEY` |
 | `scaleway/qwen3.6` | `NEXGATE_SCALEWAY_QWEN3_6_API_BASE`, `SCW_SECRET_KEY` |
-| `scaleway-devstral` | `NEXGATE_SCALEWAY_DEVSTRAL_API_BASE`, `SCW_SECRET_KEY` |
 | `chatgpt/gpt-5.6-sol` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `chatgpt/gpt-5.6-terra` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `chatgpt/gpt-5.6-luna` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `chatgpt/gpt-6-astra` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `gpt-6-astra` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `gpt-6-sol` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `gpt-6-luna` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `lun` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `chatgpt/sol-6.1` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `sol-6.1` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `chatgpt/gpt-6.1-sol` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `gpt-6.1-sol` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `gpt-5.6-terra` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `gpt-5.6-sol` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `gpt-5.6-luna` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
@@ -78,6 +91,7 @@ and proves gateway transport, not a live research provider's answer quality.
 | `circit-gateway` | `CIRCIT_CLOUDFLARE_API_KEY`, `NEXGATE_CIRCIT_GATEWAY_API_BASE` |
 | `smart-router` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `smart-router-claude` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
+| `general` | `NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true` |
 | `cf/llama-3.3` | `CLOUDFLARE_API_KEY`, `NEXGATE_CF_LLAMA_3_3_API_BASE` |
 | `cf/qwen-coder` | `CLOUDFLARE_API_KEY`, `NEXGATE_CF_QWEN_CODER_API_BASE` |
 | `cf/llama-3.1-8b` | `CLOUDFLARE_API_KEY`, `NEXGATE_CF_LLAMA_3_1_8B_API_BASE` |
@@ -88,6 +102,12 @@ and proves gateway transport, not a live research provider's answer quality.
 | `mistral/glm-5.2` | `MISTRAL_API_KEY` |
 | `mistral/glm-5.3` | `MISTRAL_API_KEY` |
 | `mistral/glm-5.3-flash` | `MISTRAL_API_KEY` |
+| `mistral/mistral-large-4` | `MISTRAL_API_KEY` |
+| `mistral-large-4` | `MISTRAL_API_KEY` |
+| `munito/qwen3.8-27b` | `MUNITO_API_KEY`, `NEXGATE_MUNITO_API_BASE` (global host) |
+| `munito/glm-5.3-flash` | `MUNITO_API_KEY`, `NEXGATE_MUNITO_EU_API_BASE` (EU) |
+| `munito/deepseek-v4-flash` | `MUNITO_API_KEY`, `NEXGATE_MUNITO_EU_API_BASE` (EU) |
+| `munito/kolibri-1` | `MUNITO_API_KEY`, `NEXGATE_MUNITO_EU_API_BASE` (EU) |
 | `opencode/big-pickle` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-flash` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/deepseek-v4-pro` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
@@ -119,22 +139,30 @@ and proves gateway transport, not a live research provider's answer quality.
 | `opencode/mimo-2.5` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `opencode/mimo` | `NEXGATE_OPENCODE_API_BASE`, `OPENCODE_API_KEY` |
 | `fallback-claude-opus-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_1M_API_BASE` |
+| `fallback-claude-opus-5-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_5_1M_API_BASE` |
+| `fallback-claude-opus-5-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_5_API_BASE` |
 | `fallback-claude-opus-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_5_API_BASE` |
 | `fallback-claude-opus-4-8[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_8_1M_API_BASE` |
 | `fallback-claude-opus-4-8` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_8_API_BASE` |
 | `fallback-claude-opus-4-7[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_1M_API_BASE` |
 | `fallback-claude-opus-4-7` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_OPUS_4_7_API_BASE` |
+| `fallback-claude-sonnet-5-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_5_1M_API_BASE` |
+| `fallback-claude-sonnet-5-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_5_API_BASE` |
 | `fallback-claude-sonnet-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_1M_API_BASE` |
 | `fallback-claude-sonnet-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_5_API_BASE` |
 | `fallback-claude-sonnet-4-6` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_SONNET_4_6_API_BASE` |
 | `fallback-claude-fable-5-1` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_FABLE_5_1_API_BASE` |
 | `fallback-claude-haiku-4-5-20251001` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_HAIKU_4_5_20251001_API_BASE` |
+| `fallback-claude-haiku-5-5[1m]` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_HAIKU_5_5_1M_API_BASE` |
+| `fallback-claude-haiku-5-5` | `ANTHROPIC_FALLBACK_TOKEN`, `NEXGATE_CLAUDE_HAIKU_5_5_API_BASE` |
 | `qwen36-modal` | `NEXGATE_QWEN36_MODAL_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen36-kaggle` | `NEXGATE_QWEN36_KAGGLE_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen38-modal` | `NEXGATE_QWEN38_MODAL_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
+| `qwen38-mlx-local` | `NEXGATE_QWEN38_MLX_LOCAL_API_BASE` |
 | `qwen38-heretic` | `NEXGATE_QWEN38_HERETIC_API_BASE`, `NEXGATE_QWEN38_HERETIC_COLAB_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen38-heretic-a100` | `NEXGATE_QWEN38_HERETIC_A100_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
 | `qwen38-heretic-lit` | `NEXGATE_QWEN38_HERETIC_LIT_API_BASE`, `NEXGATE_QWEN36_API_KEY` |
+| `qwen38-heretic-rp` | `NEXGATE_QWEN38_HERETIC_RP_API_BASE`, `NEXGATE_QWEN38_HERETIC_RP_API_KEY` |
 | `llm-422-sink` | `NEXGATE_422_SINK_API_BASE` |
 | `nvidia/deepseek-v4-pro` | `NEXGATE_NVIDIA_DEEPSEEK_V4_PRO_API_BASE`, `NVIDIA_API_KEY` |
 | `nvidia/gpt-oss-20b` | `NEXGATE_NVIDIA_GPT_OSS_20B_API_BASE`, `NVIDIA_API_KEY` |

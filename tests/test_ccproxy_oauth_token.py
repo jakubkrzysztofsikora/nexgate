@@ -8,7 +8,9 @@ client-supplied model name on a direct call.
 from __future__ import annotations
 
 import importlib.util
+import json
 import threading
+import time
 import types
 from pathlib import Path
 
@@ -101,6 +103,33 @@ class TestFallbackTokenRequiresRouterHop:
         assert token == PRIMARY_TOKEN
 
 
+class TestLiveClaudeCodeTokenSnapshot:
+    def test_snapshot_overrides_old_environment_and_clears_old_account_cooldown(self, callback, monkeypatch, tmp_path):
+        path = tmp_path / "oauth.json"
+        path.write_text(json.dumps({"accessToken": "fresh-login", "expiresAt": (time.time() + 3600) * 1000}))
+        monkeypatch.setenv("CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE", str(path))
+        monkeypatch.setattr(callback, "_anthropic_primary_cooldown_until", time.monotonic() + 900)
+        assert callback._get_live_oauth_token("anthropic") == "fresh-login"
+        assert callback._anthropic_primary_cooldown_until == 0
+        path.write_text(json.dumps({"accessToken": "refreshed-login", "expiresAt": (time.time() + 3600) * 1000}))
+        assert callback._get_live_oauth_token("anthropic") == "refreshed-login"
+
+    def test_expired_snapshot_cannot_silently_reuse_old_environment(self, callback, monkeypatch, tmp_path):
+        path = tmp_path / "oauth.json"
+        path.write_text(json.dumps({"accessToken": "expired-login", "expiresAt": (time.time() - 60) * 1000}))
+        monkeypatch.setenv("CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE", str(path))
+        with pytest.raises(ValueError, match="expired"):
+            callback._get_live_oauth_token("anthropic")
+
+    def test_snapshot_does_not_override_separate_router_fallback_account(self, callback, monkeypatch, tmp_path):
+        path = tmp_path / "oauth.json"
+        path.write_text(json.dumps({"accessToken": "fresh-login", "expiresAt": (time.time() + 3600) * 1000}))
+        monkeypatch.setenv("CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE", str(path))
+        assert callback._anthropic_oauth_token_for_model(
+            "fallback-claude-fable-5-1", "fallback-claude-fable-5-1", fallback_depth=1
+        ) == FALLBACK_TOKEN
+
+
 class TestFallbackDepthExtraction:
     def test_reads_flat_metadata_depth(self, callback) -> None:
         assert callback._fallback_depth_from_metadata({"fallback_depth": 2}) == 2
@@ -143,6 +172,27 @@ class TestTokenStateThreadSafety:
         kwargs = {"model": "claude-opus-4-8", "metadata": {"model_group": "claude-opus-4-8"}}
         callback._maybe_arm_anthropic_cooldown(kwargs, _Response())
         assert callback._anthropic_primary_cooldown_until > 0.0
+
+    def test_fallback_token_429_caps_primary_cooldown(self, callback) -> None:
+        class _Response:
+            status_code = 429
+
+        callback._maybe_arm_anthropic_cooldown(
+            {"model": "claude-opus-4-8", "metadata": {"model_group": "claude-opus-4-8"}},
+            _Response(),
+        )
+        armed = callback._anthropic_primary_cooldown_until
+        callback._maybe_arm_anthropic_cooldown(
+            {
+                "model": "claude-opus-4-8",
+                "api_key": FALLBACK_TOKEN,
+                "metadata": {"model_group": "claude-opus-4-8"},
+            },
+            _Response(),
+        )
+        remaining = callback._anthropic_primary_cooldown_until - time.monotonic()
+        assert remaining < 90
+        assert callback._anthropic_primary_cooldown_until < armed
 
 
 class TestRateLimitDetectionPrecision:

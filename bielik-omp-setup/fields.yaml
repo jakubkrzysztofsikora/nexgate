@@ -1,0 +1,51 @@
+fields:
+  Model:
+  - name: tool_calling_support
+    description: Czy wersja modelu ma wytrenowany tool-calling (hermes format, vLLM
+      tool_parsers, Ollama tools tag); wersja i data wydania
+    detail_level: detailed
+  - name: context_and_limits
+    description: Kontekst (32k/4k), maxTokens, kwantyzacja, wymagania VRAM
+    detail_level: moderate
+  Harness (omp):
+  - name: model_registration
+    description: 'Jak zarejestrować model w ~/.omp/agent/models.yml: provider, baseUrl,
+      apiKeyEnv, tool support'
+    detail_level: detailed
+  - name: flags_and_budget
+    description: --tools, --system-prompt, --no-skills/rules/extensions/lsp, budżet
+      prompt+tools ≤3k tokenów
+    detail_level: moderate
+  Gateway:
+  - name: litellm_route
+    description: 'Pozycja w litellm.yaml.tmpl: model_name, litellm_params, max_parallel_requests,
+      fallback'
+    detail_level: detailed
+  - name: backend_serving
+    description: vLLM vs Ollama vs llama.cpp; --enable-auto-tool-choice i --tool-call-parser
+      hermes dla vLLM
+    detail_level: detailed
+  Niezawodność:
+  - name: tool_call_rate
+    description: Mierzalny odsetek poprawnych tool-calls (bramka curl, suite); stabilność
+      między runami
+    detail_level: detailed
+  - name: streaming_behavior
+    description: Czy tool_calls przeżywają streaming przez LiteLLM; timeouty przy
+      2.4k+ tokenów
+    detail_level: moderate
+  Integracje:
+  - name: reasoning_core_gate
+    description: Bramka edit→omp_bridge; doctor states; kiedy native-precommit patch
+      jest potrzebny
+    detail_level: brief
+  Weryfikacja:
+  - name: pass_criteria
+    description: '≥80% suite, ≤1 retry, ≤2 tool-errors/zadanie; klasyfikacja faili:
+      timeout vs no-tool-call vs halucynacja'
+    detail_level: moderate
+uncertain:
+- coopforge_model_version
+- coopforge_tool_calling_native
+- ollama_local_serving_on_mac_studio
+- vllm_b200_availability

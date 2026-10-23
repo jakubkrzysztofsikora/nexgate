@@ -2,6 +2,7 @@ name: nexgate
 
 services:
   litellm:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: runtime/Dockerfile.litellm
@@ -11,6 +12,7 @@ services:
       DATABASE_URL: postgresql://nexgate:${POSTGRES_PASSWORD}@db:5432/nexgate
       REDIS_HOST: redis
       LITELLM_LOG: INFO
+      CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE: ${CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE:-}
     ports:
       # Loopback is always published: the portable baseline for every
       # operator, and the backend a local reverse proxy (e.g. `tailscale
@@ -23,6 +25,7 @@ services:
     volumes:
       - ./runtime/state/litellm.yaml:/app/config.yaml:ro
       - ./runtime/state/chatgpt:/root/.config/litellm/chatgpt
+      - ./runtime/state/anthropic:/run/nexgate/anthropic:ro
       - ./runtime/config/ccproxy.yaml:/app/ccproxy.yaml:ro
       - ./runtime/config/ccproxy_callback.py:/app/ccproxy_callback.py:ro
       - ./runtime/config/claude_aware_compression.py:/app/claude_aware_compression.py:ro
@@ -39,6 +42,7 @@ services:
       retries: 12
 
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: nexgate
@@ -53,6 +57,7 @@ services:
       retries: 12
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
@@ -62,6 +67,7 @@ services:
       retries: 12
 
   research-agent:
+    restart: unless-stopped
     profiles: ["research"]
     build:
       context: .
@@ -94,6 +100,7 @@ services:
       retries: 12
 
   prometheus:
+    restart: unless-stopped
     image: prom/prometheus:v3.5.0
     profiles: ["observability"]
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=15d"]
@@ -104,6 +111,7 @@ services:
       - ./runtime/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
+    restart: unless-stopped
     image: grafana/grafana:12.0.0
     profiles: ["observability"]
     environment:

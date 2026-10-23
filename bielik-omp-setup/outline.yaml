@@ -1,0 +1,38 @@
+topic: "Poprawny setup Bielik Minitron z omp (oh-my-pi)"
+
+items:
+  - name: Bielik Minitron 7B (coopforge)
+    why: "Aktualny model na NexGate; podejrzenie: stara wersja bez wytrenowanego tool-callingu — edycje 0/8 w suite, curl 20/20 tylko z 1 narzędziem i krótkim promptem"
+    status: fail-suspect
+  - name: Bielik-Minitron-7B-v3.0-Instruct
+    why: "Najnowsza wersja z oficjalnym tool-calling (speakleash/bielik-tools, vLLM tool_parsers, Ollama tools tag); kandydat do wymiany modelu na gatewayu"
+    status: candidate
+  - name: Bielik 11B v3.0 / v2.6
+    why: "Większy model, lepszy agentic; DFlash draft model dla v3.0; 4K ctx w v2.6 to ograniczenie"
+    status: alternative
+  - name: omp models.yml + providers
+    why: "Konfiguracja modelu/provider w omp: docs/models.md (1167 linii), docs/providers.md; API key resolution order"
+    status: core
+  - name: LiteLLM gateway (NexGate :4000)
+    why: "Routing, litellm.yaml.tmpl, fallback chain; max_parallel_requests=1 na coopforge"
+    status: core
+  - name: Tool-calling transport
+    why: "OpenAI-compat tools param przez LiteLLM do vLLM/Ollama; streaming; hermes_tool_parser w vLLM"
+    status: core
+  - name: System prompt 7B
+    why: "Minimalny polski prompt z zasadą 0 (edycja tylko narzędziem) i loop breakerem; 3080B ≈ 770 tokenów"
+    status: done-v1
+  - name: Alias omp-bielik-agentic
+    why: "Pre-flight curl, wąskie --tools, auto-discovery bramki rc przez -e"
+    status: done-v1
+  - name: reasoning-core gate (omp)
+    why: "rc init --host omp; native-precommit.patch + host-precommit.patch; omp_bridge.py; doctor 0/4 (runtime unverified)"
+    status: wired
+  - name: Weryfikacja (suite + bramki)
+    why: "omp-bielik-tasks.sh 12 zadań; v1 33% (9/12), v2 16%; cel ≥80% — FAIL"
+    status: fail
+
+execution:
+  batch_size: 3
+  items_per_agent: 3
+  output_dir: ./results

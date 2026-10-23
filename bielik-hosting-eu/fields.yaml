@@ -1,0 +1,79 @@
+fields:
+  basic:
+    - name: provider
+      description: nazwa providera i produktu
+      detail_level: brief
+    - name: region_dc
+      description: lokacja DC i strefa (PAR-1, Graveline, Dublin itd.)
+      detail_level: brief
+    - name: sovereignty_class
+      description: >
+        EU HQ + EU DC (pelna suwerennosc) vs US/UK HQ + EU DC (CLOUD Act
+        exposure); certyfikaty (SecNumCloud, BSI C5, ISO 27001, HDS)
+      detail_level: moderate
+  cost:
+    - name: monthly_cost
+      description: EUR/mies przy 24/7; przy per-hour — koszt 24/7 i koszt POC-hours
+      detail_level: moderate
+    - name: billing_granularity
+      description: miesieczna / per-hour / per-second; scale-to-zero czy zawsze on
+      detail_level: brief
+    - name: setup_fee_and_lockin
+      description: setup fee, okres wiazania, koszt wyjscia
+      detail_level: brief
+  performance:
+    - name: gen_tps_7b_q4
+      description: decode t/s dla 7B Q4_K_M w llama.cpp; zmierzone albo bandwidth-derived [flag]
+      detail_level: moderate
+    - name: prefill_tps
+      description: prompt processing t/s — kluczowy metryk agentic (tool-schema 4-8k tok)
+      detail_level: moderate
+    - name: ttft_at_4k
+      description: TTFT przy 4k tokach promptu w sekundach
+      detail_level: moderate
+    - name: concurrency_slots
+      description: ile rownoleglych slotow (-np); KV-cache GB per 1k tok
+      detail_level: brief
+  constraints:
+    - name: ctx_ram_headroom
+      description: max sensowny kontekst na najmniejszej jednostce (model 4.5GB + KV)
+      detail_level: moderate
+    - name: availability_status
+      description: dostepnosc od reki / waitlist / closed (Hetzner colo = closed)
+      detail_level: brief
+    - name: egress_traffic
+      description: included traffic, koszt overage
+      detail_level: brief
+    - name: electricity_metering
+      description: dotyczy colo — EUR/kWh i pobor urzadzenia (Mac mini ~40W vs L4 ~300W)
+      detail_level: brief
+  ops:
+    - name: hosting_model
+      description: self-host llama.cpp vs managed API; wladztwo nad template/parserem tool-call
+      detail_level: moderate
+    - name: tool_calling_support
+      description: OpenAI function-calling na endpoincie (serwerowy parser czy tekst)
+      detail_level: moderate
+    - name: spec_decode_support
+      description: czy da sie podpiac Bielik DFlash draft model na tym hoscie
+      detail_level: brief
+    - name: sla_uptime
+      description: gwarancja SLA (OVH AI Endpoints 99.5%, Mac mini brak SLA GPU-grade)
+      detail_level: brief
+  risk:
+    - name: llm_inference_tos
+      description: czy ToS zezwala na LLM inference (colo/dedyki czasem nie)
+      detail_level: brief
+    - name: price_stability
+      description: stabilnosc cen 6m; historyczne podwyzki (Scaleway Apple +45%)
+      detail_level: brief
+    - name: model_lock_in
+      description: managed catalog moze usunac model (Bielik zniknal z Scaleway i OVH)
+      detail_level: moderate
+
+uncertain:
+  - gen_tps_7b_q4 (zmierzone tylko wlasny Mac Studio)
+  - prefill_tps (bandwidth-derived z wyjatkiem wlasnego Mac Studio)
+  - gcore ceny (konsola-only)
+  - contabo/netcup GPU (status niepewny)
+  - koyeb EU regiony po akwizycji Mistral

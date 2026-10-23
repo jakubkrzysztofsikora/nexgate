@@ -24,6 +24,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "runtime/config/sitecustomize.py"
 
 
+@pytest.mark.parametrize("deployment", ["sk-ant-oat-old-primary", "sk-ant-oat-fallback"])
+def test_dispatch_refreshes_only_primary_deployment(patched_sitecustomize, monkeypatch, deployment):
+    monkeypatch.setattr(patched_sitecustomize, "_original_oauth_handler", lambda headers, api_key: (headers, api_key))
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat-old-primary")
+    install_stub(monkeypatch, "ccproxy_callback", _get_live_oauth_token=lambda provider: "sk-ant-oat-fresh")
+    headers, token = patched_sitecustomize._patched_optionally_handle_anthropic_oauth(
+        {"authorization": "Bearer sk-ant-oat-untrusted-client", "x-api-key": "client-key"}, deployment
+    )
+    expected = "sk-ant-oat-fresh" if deployment.endswith("primary") else deployment
+    assert token == expected
+    assert not any(name.lower() in {"authorization", "x-api-key"} for name in headers)
+
+
 class _FakeCacheControlHook:
     """Mimics 1.100 write-back of unapplied tool_config injection points."""
 

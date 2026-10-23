@@ -16,6 +16,22 @@ The mounted compatibility modules preserve the established request handling:
 Claude-aware compression, tool-call and streaming normalization, token-budget
 clamping, provider capability adaptation, and Codex Responses API bridging.
 
+Compression is a last-resort safety valve, not a steady-state optimizer. It
+fires only when a request approaches the model's context window (90% of it,
+compacting messages to 75%), reserves the non-message payload (system prompt +
+tool catalog) from that budget, and calibrates for litellm's token counter
+under-counting Anthropic's tokenizer (~1.35x). Firing earlier silently deletes
+the agent's working memory: Claude Code then re-reads files it already edited
+and burns hours re-deriving state, so the thresholds are window-scaled rather
+than absolute (`CLAUDE_COMPRESSION_TRIGGER`/`_TARGET` remain absolute
+overrides for tests and controlled rollouts).
+
+Explicit Claude model requests stay on Claude: the `claude-*` fallback chains
+hop only to their same-model `fallback-claude-*` deployment on the secondary
+Anthropic credential, and context-window fallbacks are empty. A silent
+cross-provider substitution (gpt/kimi/glm/qwen/minimax) mid-session reads as
+the model getting dumber, so those routes now surface the error instead.
+
 ## A2A Compatibility Gate
 
 The candidate image pins LiteLLM `1.100.1` and `a2a-sdk==1.1.2`, retaining

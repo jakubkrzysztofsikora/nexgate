@@ -1,0 +1,30 @@
+{
+  "item": "System prompt 7B",
+  "status": "done-v1",
+  "tool_calling_support": "Prompt is tool-centric by design: rule 0 mandates every file change goes through the edit or write tool and forbids printing updated code in the reply. Tool names referenced: read, edit, write, bash, grep, glob. Prompt bans sed/awk/perl/python for file edits. It assumes the model can emit native tool_calls; coopforge/bielik-minitron-7b passed the raw curl gate 20/20 (tests/bielik-gateway-results.json: valid_tool_calls_pct 100.0), but the full 12-task suite shows edits 0/4, so real agentic tool-calling in long omp sessions remains unproven [uncertain: coopforge_tool_calling_native]. Underlying model version behind the coopforge endpoint is not pinned in any local artifact [uncertain: coopforge_model_version].",
+  "context_and_limits": "Local file ~/.omp/bielik/SYSTEM.md, 3.2 KB (~3080 bytes), roughly 770-800 tokens for a mostly-Polish text assuming ~4 bytes/token; well under the 3k-token prompt+tools budget from the design spec. Model budget from plan doc: context 32768, maxTokens 8192 (target 2048 for simple tasks). Prompt is Polish; tool schemas stay English per spec.",
+  "model_registration": "Prompt is not registered in ~/.omp/agent/models.yml; it is injected per-invocation via the omp --system-prompt ~/.omp/bielik/SYSTEM.md flag in the omp-bielik-agentic alias. models.yml only carries the model row (id coopforge/bielik-minitron-7b, api openai-completions, baseUrl http://127.0.0.1:4000/v1, contextWindow 32768, maxTokens 8192, reasoning false, input text, supportsTools true).",
+  "flags_and_budget": "Consumed with --system-prompt ~/.omp/bielik/SYSTEM.md alongside --tools read,edit,write,bash,grep,glob and --no-skills --no-rules --no-extensions --no-lsp --no-title (extensions re-enabled selectively via -e for the rc gate). Budget check from plan: wc -c must stay <= 12288 chars (~3k tokens); current 3.2 KB passes with headroom.",
+  "litellm_route": "Prompt rides on the coopforge/bielik-minitron-7b route in runtime/config/litellm.yaml.tmpl: model openai/bielik-minitron-7b, api_base os.environ/NEXGATE_COOPFORGE_BIELIK_API_BASE, api_key os.environ/NEXGATE_COOPFORGE_BIELIK_API_KEY, drop_params true, max_tokens 8192, region eu; model_info context_window 32768 with function/tool/parallel calling declared true; fallback list empty (fail-loud by design). sitecustomize.py pins context_window 16384 for the bare 'bielik' route and registers supports_function_calling for openai/bielik.",
+  "backend_serving": "Prompt is serving-layer agnostic. coopforge endpoint is remote EU (DEV1-L-class VM per coopforge-web config: CPU only, default_model bielik-minitron-7b, model_size_gb ~5) [uncertain: exact backend engine — Ollama vs vLLM behind coopforge endpoint]. A separate coopforge-infra tier config shows model_name bielik-minitron-7b mapped to openai/SpeakLeash/bielik-minitron-7B-v3.0-instruct:Q4_K_M via http://ollama:11434/v1, i.e. Ollama OpenAI-compat with Q4_K_M quant; whether that is what nexgate/coopforge serves is unconfirmed [uncertain]. Local Ollama serving on the Mac Studio untested [uncertain: ollama_local_serving_on_mac_studio].",
+  "tool_call_rate": "Raw single-tool short-prompt gate: 20/20 valid tool_calls, 0 malformed (100%) — passes the >=90% Phase 0 bar. In-session omp suite: v1 broad-tools 33% (3/9, run cancelled after 9/12), v2 narrow-tools 16% (2/12); all 4 edit tasks failed in both runs, most failures at 200-300 s wall (timeout-class). Prompt quality did not move edit success; bottleneck is the model's tool-calling reliability, not instructions [uncertain: split between no-tool-call and timeout per task was not logged].",
+  "streaming_behavior": "No dedicated streaming test exists for this prompt/model pair; suite wall times cluster near the 300 s TASK_TIMEOUT, which is consistent with stalls at 2.4k+ token responses but not proven [uncertain: whether tool_calls survive streaming through LiteLLM for this route — not instrumented; timeouts at 2.4k+ tokens unverified].",
+  "reasoning_core_gate": "Prompt-level rule 0 (edits only via edit/write tools) is the cheap first line; the reasoning-core gate (.omp/extensions/reasoning_core_gate.ts -> src/hooks/omp_bridge.py) is the enforced second line when loaded via -e. Prompt itself does not reference the gate.",
+  "pass_criteria": "Design bar: suite >=80% pass, <=1 retry/task, <=2 tool-errors/task, failure classes timeout vs no-tool-call vs hallucination. Current measured: 33%/16% — FAIL. Prompt acceptance criteria met: rule 0 present, loop breaker present (stop after 3 failed attempts of same tool, describe error, ask for advisor), Polish mandatory, no fabricated tool results (rule 8: say 'nie sprawdzilem'), size under budget.",
+  "sources": [
+    "~/.omp/bielik/SYSTEM.md (read 2026-10-21)",
+    "openbao/tests/bielik-gateway-results.json",
+    "openbao/tests/bielik-tasks/results-omp-bielik-v1.json, results-omp-bielik-v2.json",
+    "openbao/docs/superpowers/specs/2026-10-20-bielik-minitron-omp-design.md and plans/2026-10-20-bielik-minitron-omp.md",
+    "hybrid-llm-stack-public-candidate/runtime/config/litellm.yaml.tmpl:1545-1563",
+    "~/.omp/agent/models.yml:388-397"
+  ],
+  "uncertain": [
+    "coopforge_model_version: exact Bielik Minitron build behind nexgate/coopforge/bielik-minitron-7b",
+    "coopforge_tool_calling_native: whether the served build has trained tool-calling or is prompt-parsed",
+    "backend engine behind coopforge endpoint (Ollama Q4_K_M vs vLLM) — Ollama mapping found in coopforge-infra tier, link to NexGate route unconfirmed",
+    "ollama_local_serving_on_mac_studio",
+    "streaming survival of tool_calls through LiteLLM for this route",
+    "timeout vs no-tool-call split per suite task"
+  ]
+}

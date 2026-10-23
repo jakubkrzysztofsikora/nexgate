@@ -40,3 +40,4 @@ adapter-diagnostic: ## Manually probe an explicitly selected local provider over
 	@PYTHONPATH=. uv run python -m gateway.diagnostic
 parity-report: ## Show migration parity status without reading private credentials
 	@./scripts/parity-report.sh
+

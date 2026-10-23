@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jakub.heretic-rp-gateway</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>__REPO__/scripts/heretic-rp-gateway.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RUNPOD_API_KEY</key>
+        <string>__RUNPOD_API_KEY__</string>
+        <key>RUNPOD_HERETIC_ENDPOINT_ID</key>
+        <string>__ENDPOINT_ID__</string>
+        <key>PORT</key>
+        <string>8311</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/jakubsikora/Library/Logs/heretic-rp-gateway.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jakubsikora/Library/Logs/heretic-rp-gateway.log</string>
+</dict>
+</plist>

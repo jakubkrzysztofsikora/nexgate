@@ -1,0 +1,61 @@
+{
+  "item": "Tool-calling transport",
+  "why": "OpenAI-compat tools param via LiteLLM to ollama/vLLM; streaming; hermes_tool_parser",
+  "tool_calling_support": {
+    "transport_chain": "omp (openai-completions api, tools param) -> LiteLLM :4000 /v1/chat/completions (drop_params strips non-supported fields; supports_function_calling declared in model_info) -> backend (vLLM with hermes parser OR Ollama native tools)",
+    "openai_wire_format": "tools: [{type: function, function: {name, description, parameters(JSON Schema)}}], tool_choice: auto|required|none|named; response carries choices[0].message.tool_calls[].function.{name,arguments(JSON string)}; tool results returned as role:tool messages with tool_call_id",
+    "litellm_pass_through": "LiteLLM forwards tools/tool_choice unchanged for openai/<model> routes; drop_params + additional_drop_params (web_search_options) remove params the backend rejects instead of erroring; parse_tool_call_from_content: true (used on some NexGate routes e.g. glm-5.1) recovers tool calls emitted as raw text in content — NOT set on the coopforge/bielik route",
+    "vllm_requirements": [
+      "--enable-auto-tool-choice (mandatory for tool_choice=auto)",
+      "--tool-call-parser hermes (matches Hermes-format models; alternatives: llama3_json, mistral, pythonic, llama4_pythonic, glm47, hf, beam)",
+      "--chat-template with tool-use support when tokenizer_config.json lacks one",
+      "strictness: VLLM_ENFORCE_STRICT_TOOL_CALLING=true default; --tool-strict-level function raises server floor so envelope markup stays valid even when client omits strict"
+    ],
+    "ollama_requirements": "tools param native since 2024-07 (Llama 3.1 era); OpenAI-compat /v1 endpoint accepts tools too; supported models answer with tool_calls; no parser flags; verify specific GGUF carries tools capability (Tools category on ollama.com)",
+    "bielik_status": "coopforge/bielik-minitron-7b: curl gate 20/20 valid tool_calls with 1 simple tool (get_time) and short prompt; but suite edit tasks 0/8 pass — suspected old model version without properly trained tool-calling; candidate replacement Bielik-Minitron-7B-v3.0-Instruct with official tool-calling (speakleash/bielik-tools) [uncertain coopforge_model_version, coopforge_tool_calling_native]",
+    "sources": [
+      "https://docs.vllm.ai/en/latest/features/tool_calling/",
+      "https://ollama.com/blog/tool-support",
+      "https://docs.litellm.ai/docs/completion/stream",
+      "local: openbao/tests/bielik-gateway-test.sh, openbao/.omp/extensions/reasoning_core_gate.ts"
+    ]
+  },
+  "tool_call_rate": {
+    "curl_gate": "tests/bielik-gateway-test.sh: 20 calls, 1 tool (get_time), tool_choice auto, max_tokens 256, timeout 60s; valid = tool_calls[0].function present + arguments parseable JSON (empty arguments also counted valid); threshold >=90% PASS",
+    "curl_gate_result": "20/20 valid, 0 malformed, 100.0% — PASS (single-tool, short-prompt regime only)",
+    "suite_results": "omp-bielik-tasks.sh 12 tasks (4 edit + 8 cli/log/git): v1 broad-tools 33% (cancelled 9/12, all 4 edit FAIL, wall 199-301s); v2 narrow-tools 16% (2/12 pass: cli-grep, cli-git-status; edit 0/4)",
+    "stability": "inconsistent between variants — v1 33% vs v2 16%; edit tasks never pass in either; many wall times hit ~300s TASK_TIMEOUT ceiling indicating timeout-class failures"
+  },
+  "streaming_behavior": {
+    "litellm_streaming": "stream=True supported in SDK and proxy; chunks carry delta.content; stream_chunk_builder rebuilds full response from chunk list; REPEATED_STREAMING_CHUNK_LIMIT (default 100) raises InternalServerError on model loops to enable retry logic",
+    "router_stream_timeout": "NexGate router_settings.stream_timeout: 1800s — long generations on slow GPU backends deliberately not cut; deployments carry own timeouts",
+    "tool_calls_in_stream": "OpenAI streaming protocol delivers tool_calls as delta.tool_calls fragments (id/function.name first chunk, arguments string accumulated across chunks); LiteLLM aggregates these for openai-compatible backends; vLLM hermes parser emits each tool call whole once its region parses (a call cut before its closer is parsed from text so far; unparseable call dropped); Ollama streamed tool calls were a 2024 future-improvement item and have since landed for supported models [uncertain — verify on target version]",
+    "timeout_at_2_4k_tokens": "No doc'd tool-call-specific timeout at 2.4k+ tokens; observed suite wall times cluster 200-300s at TASK_TIMEOUT; vLLM parsing is per-request so tool_call survival does not inherently degrade with length, but slow 7B backends can exceed client timeouts — NexGate mitigates with stream_timeout 1800 and per-deployment timeout 60-1800s + num_retries 0-5"
+  },
+  "pass_criteria": {
+    "suite_target": ">=80% of 12 tasks; <=1 retry per task; <=2 tool-errors per task",
+    "current_status": "FAIL — 16-33% vs 80% target",
+    "failure_classification": [
+      "timeout: wall_s ~= 300 (TASK_TIMEOUT) with no file mutation — dominant class in v1/v2 (edit-add-function 301s, edit-rename-var 294-300s, log-tail 215-300s)",
+      "no-tool-call: model answers in text without invoking edit/bash tool — suspected for failed edit tasks given curl gate passes only in 1-tool regime; multi-tool + long prompt likely exceeds untrained tool-calling ability",
+      "hallucination: model claims action not performed — not directly evidenced in results JSONs; requires transcript inspection [uncertain]"
+    ],
+    "gate_thresholds": "curl pre-flight >=90% tool-call validity (measured 100%); suite >=80%; both recorded as project stop/go gates (GATE: FAIL prints 'STOP projektu')"
+  },
+  "model_registration": "omp-side: see omp_models_yml_providers.json (provider nexgate -> LiteLLM :4000)",
+  "flags_and_budget": "see omp_models_yml_providers.json flags_and_budget (narrow --tools set, system prompt ~770 tokens, prompt+tools <=3k design budget)",
+  "litellm_route": "see LiteLLM_gateway_NexGate.json litellm_route (coopforge route params, empty fallback pinning)",
+  "backend_serving": "see LiteLLM_gateway_NexGate.json backend_serving (vLLM hermes flags, Ollama native, llama.cpp weakest)",
+  "context_and_limits": "transport-relevant limits: coopforge context_window 32768 / max_tokens 8192 (gateway-enforced); curl gate used max_tokens 256",
+  "reasoning_core_gate": {
+    "role": "edit-boundary gate orthogonal to model transport: omp extension (.omp/extensions/reasoning_core_gate.ts) hooks native_edit_prepare/result + session lifecycle, bridging to reasoning-core Python via omp_bridge with sha256-verified batches",
+    "doctor_states": "outline records doctor 0/4 (runtime unverified) after rc init --host omp with native-precommit.patch + host-precommit.patch applied [uncertain]",
+    "native_precommit_patch_needed": "gate blocks edit tool calls unless api.nativeEditProtocol === 1 ('reasoning-core requires the qualified native precommit build'); also refuses user_bash/user_python and subagent spawns — so the patch is required BEFORE any gated edit can run"
+  },
+  "uncertain": [
+    "coopforge Bielik checkpoint exact version and whether its tool-calling is natively trained [uncertain] (coopforge_model_version, coopforge_tool_calling_native)",
+    "hallucination-class failures unverified — needs transcript-level analysis [uncertain]",
+    "current Ollama streaming tool_calls behavior on target version [uncertain]",
+    "hermes parser fit for Bielik-Minitron-7B-v3.0-Instruct not yet verified against model card [uncertain]"
+  ]
+}

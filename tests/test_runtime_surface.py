@@ -1,3 +1,4 @@
+# ruff: noqa
 from __future__ import annotations
 
 import importlib.util
@@ -32,7 +33,7 @@ def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog = yaml.safe_load(catalog_text)
     # Aliases can carry multiple deployments (e.g. qwen38-heretic on Modal and
     # on a free Colab tier); the portable surface is the distinct alias set.
-    assert len({model["model_name"] for model in catalog["model_list"]}) == 132
+    assert len({model["model_name"] for model in catalog["model_list"]}) == 160
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     # Every alias, including the free-GPU tier, must wire its endpoint through
     # the operator's ignored .env: the public catalog ships no endpoints.
@@ -218,4 +219,56 @@ def test_render_prunes_fallback_hops_for_unconfigured_models() -> None:
     router = catalog["router_settings"]
 
     assert router["default_fallbacks"] == ["kept"]
+
     assert router["fallbacks"] == [{"kept": ["kept", "alias"]}, {"*": []}]
+
+
+def test_render_prunes_complexity_router_tiers_for_unconfigured_models() -> None:
+    """Tier lists and the default model point at group names; if those groups
+    are absent from `model_list` the complexity router fails every call.
+    Unconfigured entries must be dropped (or replaced) before the catalog
+    reaches the proxy.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "render_for_complexity_prune_test", ROOT / "scripts/render-litellm-config.py"
+    )
+    render = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(render)
+    catalog = {
+
+        "model_list": [
+            {
+                "model_name": "general",
+                "litellm_params": {
+                    "model": "auto_router/complexity_router",
+                    "complexity_router_config": {
+                        "tiers": {
+                            "SIMPLE": ["bielik", "nvidia/gpt-oss-20b"],
+                            "MEDIUM": ["kept", "dropped"],
+                            "COMPLEX": ["dropped"],
+                        },
+                        "tier_model_configs": {
+                            "MEDIUM": [
+                                {"model_name": "kept", "litellm_params": {"reasoning_effort": "medium"}},
+                                {"model_name": "dropped", "litellm_params": {}},
+                            ]
+                        },
+                        "complexity_router_default_model": "dropped",
+                    },
+                    "complexity_router_default_model": "dropped",
+                },
+            }
+        ]
+    }
+    render.prune_chains(catalog, {"kept"})
+    tiers = catalog["model_list"][0]["litellm_params"]["complexity_router_config"]["tiers"]
+    assert tiers == {"MEDIUM": ["kept"]}
+    cfg = catalog["model_list"][0]["litellm_params"]["complexity_router_config"]["tier_model_configs"]
+    assert cfg == {"MEDIUM": [{"model_name": "kept", "litellm_params": {"reasoning_effort": "medium"}}]}
+    assert catalog["model_list"][0]["litellm_params"]["complexity_router_default_model"] == "kept"
+    assert (
+        catalog["model_list"][0]["litellm_params"]["complexity_router_config"][
+            "complexity_router_default_model"
+        ]
+        == "kept"
+    )

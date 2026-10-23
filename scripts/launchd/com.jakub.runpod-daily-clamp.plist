@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jakub.runpod-daily-clamp</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>__REPO__/scripts/runpod-daily-clamp.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RUNPOD_API_KEY</key>
+        <string>__RUNPOD_API_KEY__</string>
+        <key>RUNPOD_HERETIC_ENDPOINT_ID</key>
+        <string>__ENDPOINT_ID__</string>
+        <key>CLAMP_MS</key>
+        <string>10800000</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/jakubsikora/Library/Logs/runpod-daily-clamp.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jakubsikora/Library/Logs/runpod-daily-clamp.log</string>
+</dict>
+</plist>

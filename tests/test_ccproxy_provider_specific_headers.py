@@ -145,6 +145,43 @@ def test_missing_scope_is_created_for_anthropic(callback) -> None:
     assert created["extra_headers"]["authorization"] == f"Bearer {PRIMARY_TOKEN}"
 
 
+def test_live_oauth_selection_updates_sdk_credential_as_well_as_headers(callback) -> None:
+    # The transport rebuilds Authorization from api_key, overriding stale headers.
+    data = _anthropic_request(None)
+    data["api_key"] = CLIENT_TOKEN
+    result = callback.forward_provider_oauth(data, {})
+    assert result["api_key"] == PRIMARY_TOKEN
+    assert result["extra_headers"]["authorization"] == f"Bearer {PRIMARY_TOKEN}"
+
+
+def test_server_held_oauth_gets_claude_billing_line(callback) -> None:
+    chat = _anthropic_request(None)
+    chat["messages"] = [{"role": "user", "content": "ping"}]
+
+    chat_result = callback.forward_provider_oauth(chat, {})
+
+    assert chat_result["messages"][0] == {
+        "role": "system",
+        "content": callback._CLAUDE_OAUTH_BILLING_HEADER,
+    }
+    assert chat_result["messages"][1]["role"] == "user"
+
+    native = _anthropic_request(None)
+    native["messages"] = [{"role": "user", "content": [{"type": "text", "text": "ping"}]}]
+    native["system"] = [{"type": "text", "text": "existing"}]
+    native["proxy_server_request"]["url"] = "http://127.0.0.1:4000/v1/messages"
+
+    native_result = callback.forward_provider_oauth(native, {})
+
+    assert native_result["system"][0]["text"] == callback._CLAUDE_OAUTH_BILLING_HEADER
+    assert native_result["system"][1]["text"] == "existing"
+    assert all(message.get("role") != "system" for message in native_result["messages"])
+
+    again = callback.forward_provider_oauth(native_result, {})
+    assert again["system"][0]["text"] == callback._CLAUDE_OAUTH_BILLING_HEADER
+    assert len(again["system"]) == 2
+
+
 def test_strip_client_auth_headers_covers_every_scoped_entry(callback) -> None:
     data = _anthropic_request(_scoped_list())
 

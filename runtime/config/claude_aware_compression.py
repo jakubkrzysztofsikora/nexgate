@@ -7,11 +7,24 @@ the conversation by truncating long tool_result blocks, dropping image
 blocks from old messages, and, if still over budget, dropping the oldest
 non-system messages. This keeps Claude Code's own tool list intact and avoids
 the hallucinations caused by stubbed context.
+
+This is a last-resort safety valve, not a steady-state optimizer: by default
+it only fires when a request approaches the model's context window (90% of
+the window) and compacts messages down to 75% of it. The message budget is
+measured after reserving the non-message payload (system prompt + tool
+catalog), so a large MCP tool list cannot push a request over the window
+after messages were shrunk. Firing earlier than that silently deletes the
+agent's working memory -- Claude Code re-reads files it already edited and
+burns hours re-deriving state -- so thresholds are window-scaled rather than
+absolute. Absolute token thresholds remain available for tests and
+controlled rollouts via CLAUDE_COMPRESSION_TRIGGER / CLAUDE_COMPRESSION_TARGET.
 """
 
+import hashlib
 import json
 import logging
 import os
+import threading
 from typing import Any, Dict, List, Optional
 
 from litellm.integrations.custom_logger import CustomLogger
@@ -33,11 +46,23 @@ _DEFAULT_MAX_REQUEST_BYTES = 5_000_000
 class ClaudeAwareCompression(CustomLogger):
     """CustomLogger that compresses Anthropic Messages without adding tools."""
 
+    # Token counts for the non-message payload (system prompt + tool catalog),
+    # keyed by "model:sha1(payload)". The catalog is byte-identical across the
+    # turns of a session, so the expensive tokenization runs once per shape.
+    # LiteLLM serves hooks from worker threads and async tasks, so reads and
+    # writes take the lock and overflow evicts the oldest entry instead of
+    # clearing every session's cached catalog.
+    _overhead_cache: Dict[str, int] = {}
+    _overhead_cache_lock = threading.Lock()
+
     def __init__(
         self,
         enabled: bool = True,
-        compression_trigger: int = 100,
-        compression_target: int = 50,
+        compression_trigger: Optional[int] = None,
+        compression_target: Optional[int] = None,
+        compression_trigger_pct: float = 90.0,
+        compression_target_pct: float = 75.0,
+        token_estimate_safety: float = 1.35,
         max_tool_result_chars: int = 8000,
         min_recent_messages: int = 6,
         image_token_estimate: int = _DEFAULT_IMAGE_TOKEN_ESTIMATE,
@@ -49,6 +74,9 @@ class ClaudeAwareCompression(CustomLogger):
         self.enabled = enabled
         self.compression_trigger = compression_trigger
         self.compression_target = compression_target
+        self.compression_trigger_pct = compression_trigger_pct
+        self.compression_target_pct = compression_target_pct
+        self.token_estimate_safety = token_estimate_safety
         self.max_tool_result_chars = max_tool_result_chars
         self.min_recent_messages = min_recent_messages
         self.image_token_estimate = image_token_estimate
@@ -154,20 +182,39 @@ class ClaudeAwareCompression(CustomLogger):
     def _effective_thresholds(
         self, model: str, model_info: Optional[Dict[str, Any]] = None, is_first: bool = False
     ) -> tuple[int, int]:
-        """Return trigger and target, scaling up for large-context models.
+        """Return the message-level trigger and target token budgets.
 
-        For the very first request (no assistant turn yet) compression is
-        disabled so the initial task and system prompt pass through untouched.
-        Subsequent requests compress aggressively so context growth is capped
-        from prompt #2 onward.
+        The callback only shrinks ``messages``, so the caller reserves the
+        non-message payload (system prompt + tool catalog) from these budgets
+        before comparing them to a token count.
+
+        Compression is a last-resort safety valve, not a steady-state
+        optimizer: by default it fires only when the request approaches the
+        model's context window (90% of it) and compacts messages to 75%.
+        Absolute token overrides (CLAUDE_COMPRESSION_TRIGGER /
+        CLAUDE_COMPRESSION_TARGET) remain available for tests and controlled
+        rollouts. The previous absolute defaults (100/50 tokens) fired on
+        every follow-up request and silently deleted the agent's working
+        memory, which made Claude Code re-read files and re-derive state it
+        had already handled.
         """
         context_window = self._model_context_window(model, model_info)
+        if self.compression_trigger is not None:
+            trigger = max(int(self.compression_trigger), 1)
+            target = max(int(self.compression_target or 0), trigger // 2)
+            return trigger, target
         if is_first:
-            return context_window * 2, context_window
-        # Tests and controlled rollouts may set a lower threshold; the production
-        # default remains 100, but silently flooring it breaks that contract.
-        trigger = max(self.compression_trigger, 1)
-        target = max(self.compression_target, trigger // 2)
+            # The opening request carries the task and the system prompt; let
+            # it pass untouched while the calibrated estimate fits the window
+            # (the caller divides these budgets by the tokenizer safety factor
+            # and reserves the non-message payload).
+            return context_window, int(
+                context_window * self.compression_target_pct / 100.0
+            )
+        trigger = max(int(context_window * self.compression_trigger_pct / 100.0), 1)
+        target = max(
+            int(context_window * self.compression_target_pct / 100.0), trigger // 2
+        )
         return trigger, target
 
     async def async_pre_call_hook(self, *args: Any, **kwargs: Any) -> Optional[Dict[str, Any]]:
@@ -288,6 +335,50 @@ class ClaudeAwareCompression(CustomLogger):
         except Exception:
             return 0
 
+    def _overhead_tokens(self, model: str, data: Dict[str, Any]) -> int:
+        """Token cost of the non-message payload: system prompt + tool catalog.
+
+        A large MCP tool list is re-sent on every request and is not touched
+        by this callback, so the message budget must reserve room for it --
+        otherwise shrinking messages still leaves the full request over the
+        context window. Cached per (model, payload hash) because the catalog
+        is byte-identical across the turns of a session and tokenizing
+        hundreds of tool schemas is not free.
+        """
+        parts: List[str] = []
+        for key in ("system", "tools", "tool_choice"):
+            value = data.get(key)
+            if not value:
+                continue
+            try:
+                parts.append(json.dumps(value, default=str, sort_keys=True))
+            except (TypeError, ValueError):
+                parts.append(str(value))
+        if not parts:
+            return 0
+        text = "\n".join(parts)
+        cache = ClaudeAwareCompression._overhead_cache
+        lock = ClaudeAwareCompression._overhead_cache_lock
+        cache_key = (
+            f"{model}:{hashlib.sha1(text.encode('utf-8', 'ignore')).hexdigest()}"
+        )
+        with lock:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                cache[cache_key] = cache.pop(cache_key)
+                return cached
+        try:
+            tokens = int(token_counter(model=model, text=text))
+        except Exception:
+            tokens = len(text) // 4
+        with lock:
+            if cache_key in cache:
+                cache.pop(cache_key)
+            elif len(cache) >= 64:
+                cache.pop(next(iter(cache)), None)
+            cache[cache_key] = tokens
+        return tokens
+
     @staticmethod
     def _already_compressed(data: Dict[str, Any], messages: List[Dict[str, Any]]) -> bool:
         if getattr(messages, "_claude_aware_compressed", False):
@@ -312,7 +403,7 @@ class ClaudeAwareCompression(CustomLogger):
         try:
             import json as _json
             import os as _os
-            from datetime import datetime as _dt
+            from datetime import datetime as _dt, timezone as _tz
             path = _os.environ.get(
                 "CLAUDE_COMPRESSION_SAVINGS_LOG", "/tmp/token_savings.jsonl"
             )
@@ -320,7 +411,7 @@ class ClaudeAwareCompression(CustomLogger):
             saved = max(0, int(original_tokens) - int(final_tokens))
             entry = {
                 "kind": "compression",
-                "timestamp": _dt.utcnow().isoformat() + "Z",
+                "timestamp": _dt.now(_tz.utc).isoformat(),
                 "model": model,
                 "original_tokens": int(original_tokens),
                 "final_tokens": int(final_tokens),
@@ -466,12 +557,32 @@ class ClaudeAwareCompression(CustomLogger):
                 isinstance(m, dict) and m.get("role") == "assistant" for m in messages
             )
             trigger, target = self._effective_thresholds(model, model_info, is_first)
+            # Reserve the non-message payload (system prompt + tool catalog)
+            # out of the window budget: this callback only shrinks messages,
+            # so the trigger/target must be measured against what is left.
+            # litellm's token_counter only approximates Anthropic's tokenizer
+            # and undercounts real agent content (measured ~1.33x against
+            # provider-reported usage on live Claude Code traffic), so divide
+            # the window budget by the same safety factor.
+            overhead = self._overhead_tokens(model, data)
+            safety = max(self.token_estimate_safety, 1.0)
+            if self.compression_trigger is not None:
+                message_trigger = max(trigger, 1)
+                message_target = max(target, message_trigger // 2)
+            else:
+                calibrated_trigger = int(trigger / safety)
+                calibrated_target = int(target / safety)
+                min_message_floor = max(int(calibrated_target * 0.25), 1000)
+                message_trigger = max(calibrated_trigger - overhead, min_message_floor)
+                message_target = max(calibrated_target - overhead, min_message_floor // 2, 500)
+                if message_target > message_trigger:
+                    message_target = max(message_trigger // 2, 500)
             count_input = self._strip_images_for_counting(messages)
             original_tokens = self._safe_token_count(model, count_input)
             original_bytes = self._estimate_request_bytes(data, messages, model)
             compressed = messages
             did_compress = False
-            if original_tokens > trigger:
+            if original_tokens > message_trigger:
                 compressed = self._drop_old_images(messages)
                 non_system_indices = [
                     i for i, m in enumerate(compressed) if m.get("role") != "system"
@@ -493,7 +604,7 @@ class ClaudeAwareCompression(CustomLogger):
                 # `cache_control` breakpoint at index -1, invalidating the
                 # Anthropic trailing-turn cache (0.1x reads -> 1.25x write).
                 if self.drop_old_messages:
-                    compressed = self._drop_old_messages(compressed, model, target)
+                    compressed = self._drop_old_messages(compressed, model, message_target)
                 did_compress = True
 
             changed = did_compress or len(messages) != original_len
@@ -511,11 +622,15 @@ class ClaudeAwareCompression(CustomLogger):
             removed = len(messages) - len(compressed)
 
             _logger.info(
-                "ClaudeAwareCompression: model=%s original=%d final=%d removed=%d",
+                "ClaudeAwareCompression: model=%s original=%d final=%d removed=%d overhead=%d trigger=%d target=%d safety=%.2f",
                 model,
                 original_tokens,
                 final_tokens,
                 removed,
+                overhead,
+                message_trigger,
+                message_target,
+                safety,
             )
             self._record_savings(model, original_tokens, final_tokens)
             data["messages"] = compressed
@@ -931,10 +1046,31 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_optional_int(name: str) -> Optional[int]:
+    """Absolute-threshold override; unset/blank keeps the window-scaled default."""
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
 claude_aware_compression = ClaudeAwareCompression(
     enabled=_env_bool("CLAUDE_COMPRESSION_ENABLED", True),
-    compression_trigger=_env_int("CLAUDE_COMPRESSION_TRIGGER", 100),
-    compression_target=_env_int("CLAUDE_COMPRESSION_TARGET", 50),
+    compression_trigger=_env_optional_int("CLAUDE_COMPRESSION_TRIGGER"),
+    compression_target=_env_optional_int("CLAUDE_COMPRESSION_TARGET"),
+    compression_trigger_pct=_env_float("CLAUDE_COMPRESSION_TRIGGER_PCT", 90.0),
+    compression_target_pct=_env_float("CLAUDE_COMPRESSION_TARGET_PCT", 75.0),
+    token_estimate_safety=_env_float("CLAUDE_COMPRESSION_TOKEN_SAFETY", 1.35),
     max_tool_result_chars=_env_int("CLAUDE_COMPRESSION_MAX_TOOL_RESULT_CHARS", 8000),
     min_recent_messages=_env_int("CLAUDE_COMPRESSION_MIN_RECENT_MESSAGES", 6),
     image_token_estimate=_env_int("CLAUDE_COMPRESSION_IMAGE_TOKEN_ESTIMATE", _DEFAULT_IMAGE_TOKEN_ESTIMATE),

@@ -16,8 +16,9 @@
 set -euo pipefail
 
 # ── Helpers ──────────────────────────────────────────────────────────
-red='\033[31m'; green='\033[32m'; yellow='\033[33m'; cyan='\033[36m'; bold='\033[1m'; reset='\033[0m'
+red='\033[31m'; green='\033[32m'; yellow='\033[33m'; cyan='\033[36m'; dim='\033[2m'; bold='\033[1m'; reset='\033[0m'
 ok()   { printf "  ${green}✓${reset} %s\n" "$*"; }
+info() { printf "  ${cyan}ℹ${reset} %s\n" "$*"; }
 warn() { printf "  ${yellow}⚠${reset} %s\n" "$*"; }
 die()  { printf "  ${red}✗${reset} %s\n" "$*" >&2; exit 1; }
 
@@ -42,10 +43,10 @@ case "$ACTION" in
   help|--help|-h)
     echo "Usage: nexgate {install|update|restore|status} [PATH_TO_NEXGATE_REPO]"
     echo ""
-    echo "  install  Wire Claude Code in CWD to use LiteLLM nexgate gateway"
-    echo "  update   Fast-forward source, refresh CLI symlink, reapply install"
-    echo "  restore  Undo wiring, restore previous .claude/settings.local.json"
-    echo "  status   Show current wiring state"
+    echo "  install   Wire Claude Code in CWD to use LiteLLM nexgate gateway"
+    echo "  update    Fast-forward source, refresh CLI symlink, reapply install"
+    echo "  restore   Undo wiring, restore previous .claude/settings.local.json"
+    echo "  status    Show current wiring state"
     exit 0
     ;;
   *)
@@ -165,6 +166,7 @@ cmd_status() {
 
 # ── install ──────────────────────────────────────────────────────────
 cmd_install() {
+  local target_url="${1:-}"
   load_nexgate_env
 
   command -v jq >/dev/null 2>&1 || die "jq required (brew install jq)"
@@ -175,19 +177,22 @@ cmd_install() {
   local master_key="${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY not set in .env}"
   local default_model="${CLAUDE_CODE_DEFAULT_MODEL:-claude-opus-4-8[1m]}"
   local opus_model="${CLAUDE_CODE_OPUS_MODEL:-claude-opus-4-8[1m]}"
-  local sonnet_model="${CLAUDE_CODE_SONNET_MODEL:-claude-sonnet-4-6}"
+  local sonnet_model="${CLAUDE_CODE_SONNET_MODEL:-claude-sonnet-5-5}"
   local haiku_model="${CLAUDE_CODE_HAIKU_MODEL:-claude-haiku-4-5-20251001}"
-  if [[ "$litellm_host" == *:* && "$litellm_host" != \[* ]]; then
-    litellm_host="[${litellm_host}]"  # IPv6 literals need brackets in URLs
-  fi
-  # Omit the port when it's the scheme default so the URL stays clean
-  # (https://host/ not https://host:443).
-  if [[ -z "$litellm_port" ]] \
-    || { [[ "$litellm_scheme" == "https" && "$litellm_port" == "443" ]]; } \
-    || { [[ "$litellm_scheme" == "http" && "$litellm_port" == "80" ]]; }; then
-    local gateway_url="${litellm_scheme}://${litellm_host}"
-  else
-    local gateway_url="${litellm_scheme}://${litellm_host}:${litellm_port}"
+  local gateway_url="$target_url"
+  if [[ -z "$gateway_url" ]]; then
+    if [[ "$litellm_host" == *:* && "$litellm_host" != \[* ]]; then
+      litellm_host="[${litellm_host}]"  # IPv6 literals need brackets in URLs
+    fi
+    # Omit the port when it's the scheme default so the URL stays clean
+    # (https://host/ not https://host:443).
+    if [[ -z "$litellm_port" ]] \
+      || { [[ "$litellm_scheme" == "https" && "$litellm_port" == "443" ]]; } \
+      || { [[ "$litellm_scheme" == "http" && "$litellm_port" == "80" ]]; }; then
+      gateway_url="${litellm_scheme}://${litellm_host}"
+    else
+      gateway_url="${litellm_scheme}://${litellm_host}:${litellm_port}"
+    fi
   fi
 
   mkdir -p "$CLAUDE_DIR"
@@ -278,7 +283,7 @@ cmd_install() {
   printf "  ${cyan}Haiku override:${reset} %s\n" "$haiku_model"
   printf "  ${cyan}Gateway:${reset}        %s\n" "$gateway_url"
   echo
-  printf "  Switch models in-session with: /model claude-opus-4-8[1m] | /model claude-haiku-4-5-20251001 | /model chatgpt/gpt-5.5 | /model deepseek-v4-pro[1m] | /model kimi | /model mistral\n"
+  printf "  Switch models in-session with: /model claude-opus-4-8[1m] | /model claude-haiku-4-5-20251001 | /model chatgpt/gpt-5.5 | /model deepseek-v4-pro[1m] | /model kimi | /model mistral | /model mistral-large-4\n"
 
   # ── Ensure .claude/ is in .gitignore ─────────────────────────────
   local gitignore="${TARGET_DIR}/.gitignore"
@@ -436,6 +441,8 @@ wire_opencode() {
     "kimi-k3"
     "minimax-m3"
     "mistral"
+    "mistral-large-4"
+    "mistral/mistral-large-4"
     "qwen38-modal"
     "qwen38-heretic"
   )
@@ -588,8 +595,8 @@ cmd_update() {
 
 # ── Main dispatch ────────────────────────────────────────────────────
 case "${ACTION}" in
-  install)  cmd_install  ;;
-  update)   cmd_update   ;;
-  restore)  cmd_restore  ;;
-  status)   cmd_status   ;;
+  install)   cmd_install   ;;
+  update)    cmd_update    ;;
+  restore)   cmd_restore   ;;
+  status)    cmd_status    ;;
 esac

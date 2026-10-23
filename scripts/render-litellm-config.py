@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import re
 import sys
@@ -10,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER_PREFIX = "replace-with-"
@@ -54,7 +54,9 @@ def resolve_environment(value: Any, environment: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [resolve_environment(item, environment) for item in value]
     if isinstance(value, dict):
-        return {key: resolve_environment(item, environment) for key, item in value.items()}
+        return {
+            key: resolve_environment(item, environment) for key, item in value.items()
+        }
     return value
 
 
@@ -87,15 +89,55 @@ def prune_chains(catalog: dict[str, Any], available: set[str]) -> None:
         router["default_fallbacks"] = [
             target for target in router["default_fallbacks"] if target in resolvable
         ]
+    for model in catalog.get("model_list") or []:
+        params = model.get("litellm_params") or {}
+        config = params.get("complexity_router_config")
+        if not isinstance(config, dict):
+            continue
+        tiers = config.get("tiers")
+        if isinstance(tiers, dict):
+            config["tiers"] = {
+                tier: [m for m in models if m in resolvable]
+                for tier, models in tiers.items()
+                if any(m in resolvable for m in models)
+            }
+        tier_configs = config.get("tier_model_configs")
+        if isinstance(tier_configs, dict):
+            config["tier_model_configs"] = {
+                tier: [entry for entry in entries
+                       if not isinstance(entry, dict)
+                       or str(entry.get("model_name") or "") in resolvable]
+                for tier, entries in tier_configs.items()
+            }
+        default = str(config.get("complexity_router_default_model") or params.get("complexity_router_default_model") or "")
+        survivors = [m for models in (config.get("tiers") or {}).values() for m in models]
+        if default and default not in resolvable and survivors:
+            replacement = survivors[0]
+            for target in (config, params):
+                if isinstance(target, dict) and "complexity_router_default_model" in target:
+                    target["complexity_router_default_model"] = replacement
 
 
 def main() -> int:
-    dotenv_path = ROOT / os.environ.get("NEXGATE_ENV_FILE", ".env")
+    dotenv_name = os.environ.get("NEXGATE_ENV_FILE")
+    if dotenv_name:
+        dotenv_path = ROOT / dotenv_name
+    elif (ROOT / ".env").is_file():
+        dotenv_path = ROOT / ".env"
+    elif (ROOT / ".env.nexgate").is_file():
+        dotenv_path = ROOT / ".env.nexgate"
+    else:
+        dotenv_path = ROOT / ".env"
     if not dotenv_path.is_file():
-        print("Run make configure first, then add credentials for the providers you want to use.", file=sys.stderr)
+        print(
+            "Run make configure first, then add credentials for the providers you want to use.",
+            file=sys.stderr,
+        )
         return 2
 
     environment = load_dotenv(dotenv_path)
+    if configured(environment.get("CCPROXY_ANTHROPIC_OAUTH_TOKEN_FILE")) and not configured(environment.get("CLAUDE_CODE_OAUTH_TOKEN")):
+        environment["CLAUDE_CODE_OAUTH_TOKEN"] = "sk-ant-oat-file-placeholder"
     catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
     selected_models = []
     skipped_models = 0
@@ -115,7 +157,36 @@ def main() -> int:
     output_path = ROOT / "runtime/state/litellm.yaml"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(yaml.safe_dump(catalog, sort_keys=False))
-    print(f"Rendered {len(selected_models)} enabled model routes; skipped {skipped_models} incomplete routes.")
+
+    # Also render the stateless configuration for Scaleway Serverless Fallback
+    fallback_catalog = copy.deepcopy(catalog)
+    fallback_general = fallback_catalog.get("general_settings", {})
+    fallback_general.pop("database_url", None)
+    fallback_general.pop("database_connection_pool_limit", None)
+    fallback_general["store_model_in_db"] = False
+    fallback_general["store_prompts_in_spend_logs"] = False
+
+    fallback_litellm = fallback_catalog.get("litellm_settings", {})
+    fallback_litellm["cache"] = False
+    fallback_litellm.pop("cache_params", None)
+
+    # Filter out models pointing to local machine endpoints (127.0.0.1 / localhost)
+    fallback_models = []
+    for model in fallback_catalog.get("model_list", []):
+        params = model.get("litellm_params", {})
+        api_base = str(params.get("api_base") or "")
+        if "127.0.0.1" in api_base or "localhost" in api_base:
+            continue
+        fallback_models.append(model)
+    fallback_catalog["model_list"] = fallback_models
+    prune_chains(fallback_catalog, {m["model_name"] for m in fallback_models})
+
+    fallback_output_path = ROOT / "runtime/state/litellm.fallback.yaml"
+    fallback_output_path.write_text(yaml.safe_dump(fallback_catalog, sort_keys=False))
+
+    print(
+        f"Rendered {len(selected_models)} enabled model routes ({len(fallback_models)} fallback); skipped {skipped_models} incomplete routes."
+    )
     return 0
 
 

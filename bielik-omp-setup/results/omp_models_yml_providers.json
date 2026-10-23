@@ -1,0 +1,86 @@
+{
+  "item": "omp models.yml + providers",
+  "why": "omp model/provider registration; docs at github.com/can1357/oh-my-pi/blob/main/docs/models.md and docs/providers.md",
+  "model_registration": {
+    "config_path_precedence": [
+      "~/.omp/agent/models.yml",
+      "~/.omp/agent/models.yaml"
+    ],
+    "profile_paths": "Named profiles: ~/.omp/profiles/<name>/agent/; PI_CONFIG_DIR changes config-root dir name; PI_CODING_AGENT_DIR overrides default-profile agent directory",
+    "legacy": "If both YAML files missing and models.json exists, it is migrated to models.yml",
+    "root_shape": "providers is the only root key the registry consumes; unknown root keys do not configure model behavior",
+    "provider_fields": {
+      "baseUrl": "string, required for full custom provider",
+      "apiKey": "env-var-name-or-literal; prefix ! runs shell command, trimmed stdout used; required unless auth: none|oauth",
+      "api": "one of openai-completions, openai-responses, openai-codex-responses, azure-openai-responses, anthropic-messages, bedrock-converse-stream, google-generative-ai, google-gemini-cli, google-vertex, typesafe, openrouter-decisions, openai-decisions, workers-ai-systemone",
+      "auth": "apiKey (default) | none | oauth",
+      "authHeader": "true injects Authorization: Bearer <key> on every request",
+      "headers": "per-provider extra headers; values may be !command secrets",
+      "disableStrictTools": "true for Anthropic-compatible endpoints rejecting the strict field",
+      "discovery": "type: ollama|llama.cpp|lm-studio|openai-models-list|proxy|litellm|apple-foundation-models; optional timeoutMs (positive finite); requires provider-level api except type proxy",
+      "modelOverrides": "rename/override built-in or discovered models",
+      "models": "list of custom models; each entry: id (required), name, api, reasoning, input, contextWindow, maxContextWindow, maxTokens, cost, headers, compat, baseUrl, tokenizer"
+    },
+    "model_entry_key_fields": [
+      "id (required, non-empty)",
+      "contextWindow (positive, required for custom entries when provided)",
+      "maxTokens (positive)",
+      "maxContextWindow (positive safe integer >= contextWindow)"
+    ],
+    "validation_rules": {
+      "full_custom_provider": "baseUrl + apiKey (unless auth none/oauth) + api at provider level or per model",
+      "override_only_provider": "must define at least one of: baseUrl, apiKey, auth none, headers, compat, disableStrictTools true, guardrailIdentifier, requestMetadata, non-empty modelOverrides, discovery, remoteCompaction"
+    },
+    "example_for_nexgate_bielik": {
+      "yaml": "providers:\n  nexgate:\n    baseUrl: http://127.0.0.1:4000/v1\n    api: openai-completions\n    apiKey: NEXGATE_MASTER_KEY\n    models:\n      - id: coopforge/bielik-minitron-7b\n        name: Bielik Minitron 7B (coopforge)\n        contextWindow: 32768\n        maxTokens: 8192\n        cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0}",
+      "notes": "apiKey resolves as env-var-name first (exact case, non-empty), else literal string"
+    },
+    "credential_precedence": [
+      "1. Runtime override (CLI --api-key), never persisted",
+      "2. models.yml config apiKey (beats stored OAuth deliberately, honored for custom baseUrl/gateway)",
+      "3. Stored OAuth credential (multi-account ranked, rotated)",
+      "4. Login-sourced stored API key",
+      "5. Extension config fallback",
+      "6. Provider environment variable (incl. .env files)",
+      "7. Other stored API key (broker-migrated, last resort)"
+    ],
+    "env_files_precedence": [
+      "non-empty process env",
+      "<project>/.env",
+      "~/.omp/agent/.env",
+      "~/.omp/.env",
+      "~/.env"
+    ],
+    "tool_support_declaration": "models.yml has no explicit 'tools: true' flag; tool capability comes from the chosen api transport (openai-completions/openai-responses carry the tools param) plus per-model compat block; LiteLLM-served models declare supports_function_calling on the gateway side and drop_params on the route removes unsupported params",
+    "discovery_options_relevant": "discovery.type: litellm or openai-models-list (injectV1: false for versioned gateway roots) can auto-list gateway models; discovery requires provider-level api except proxy type",
+    "transport_note": "transport: pi-native sends every model under provider to omp auth-gateway via POST /v1/pi/stream; apiKey is the gateway bearer",
+    "sources": [
+      "https://raw.githubusercontent.com/can1357/oh-my-pi/main/docs/models.md",
+      "https://raw.githubusercontent.com/can1357/oh-my-pi/main/docs/providers.md"
+    ]
+  },
+  "flags_and_budget": {
+    "model_selection": "Select as provider/model-id, e.g. nexgate/coopforge/bielik-minitron-7b; --model flag or /model in session; modelRoles/enabledModels/enabledProviders/modelProviderOrder/cycleOrder live in model settings (packages/coding-agent/src/config/model-settings.ts)",
+    "disabling_providers": "disabledProviders in ~/.omp/agent/config.yml or <project>/.omp/config.yml removes every model under that provider; checked before credentials",
+    "local_engines": "ollama (OLLAMA_BASE_URL, default http://127.0.0.1:11434, keyless, implicit models use openai-responses), llama.cpp (LLAMA_CPP_BASE_URL, :8080), lm-studio (LM_STUDIO_BASE_URL, :1234/v1, openai-completions); implicit discovery skipped when same-ID provider exists in models.yml or is disabled",
+    "prompt_plus_tools_budget": "Design target from outline: system prompt + tool schemas <= ~3k tokens (draft 3080B ~= 770 tokens); omp clamps locally by contextWindow/maxTokens from models.yml; no built-in hard budget flag documented in models.md/providers.md — budget enforced by operator via narrow --tools set and short system prompt",
+    "restart_after_config_change": "Config loads at startup; omp models refresh <provider> refreshes discovery-backed catalog online",
+    "sources": [
+      "https://raw.githubusercontent.com/can1357/oh-my-pi/main/docs/models.md",
+      "https://raw.githubusercontent.com/can1357/oh-my-pi/main/docs/providers.md",
+      "local outline: bielik-omp-setup/outline.yaml"
+    ]
+  },
+  "tool_calling_support": "Covered by sibling item Tool_calling_transport.json (transport chain omp->LiteLLM->vLLM hermes parser / Ollama native tools); for omp itself: no explicit tools flag in models.yml — capability follows from api transport choice",
+  "context_and_limits": "omp-side limits set in models.yml entry: contextWindow 32768, maxTokens 8192 for coopforge/bielik-minitron-7b (must match gateway model_info); quantization/VRAM are backend-side, see LiteLLM_gateway_NexGate.json",
+  "litellm_route": "See LiteLLM_gateway_NexGate.json for the model_list entry; omp consumes it via provider nexgate baseUrl http://127.0.0.1:4000/v1",
+  "backend_serving": "See LiteLLM_gateway_NexGate.json backend_serving (vLLM --enable-auto-tool-choice --tool-call-parser hermes vs Ollama native tools)",
+  "tool_call_rate": "See Tool_calling_transport.json (curl gate 20/20=100%, suite v1 33% / v2 16%)",
+  "streaming_behavior": "See Tool_calling_transport.json streaming_behavior (delta.tool_calls fragments, stream_timeout 1800)",
+  "reasoning_core_gate": "See Tool_calling_transport sibling item coverage in outline (item 'reasoning-core gate (omp)': rc init --host omp, native-precommit.patch + host-precommit.patch, omp_bridge.py, doctor 0/4 runtime unverified); gate extension code in openbao/.omp/extensions/reasoning_core_gate.ts blocks edit/read/grep/glob/find tool calls unless nativeEditProtocol===1 (qualified native precommit build) and refuses user_bash/user_python plus subagent spawns",
+  "pass_criteria": "See Tool_calling_transport.json pass_criteria (>=80% suite target vs 16-33% actual, failure classes timeout/no-tool-call/hallucination)",
+  "uncertain": [
+    "exact omp CLI flags (--tools/--system-prompt/--no-skills spelling) not present in models.md/providers.md excerpts read; verify against omp --help or docs/cli.md [uncertain]",
+    "whether omp applies an internal tools-token budget automatically [uncertain]"
+  ]
+}

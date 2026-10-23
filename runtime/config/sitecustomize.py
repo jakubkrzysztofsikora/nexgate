@@ -1,7 +1,16 @@
 # ruff: noqa
+import inspect
 import json
 import logging
 import os
+import sys as _sc_sys
+
+if any(
+	os.path.basename(str(_arg)).startswith("prisma")
+	for _arg in (getattr(_sc_sys, "orig_argv", None) or getattr(_sc_sys, "argv", None) or ())[:3]
+):
+	raise ImportError(name="sitecustomize")
+
 import litellm
 
 # Configure a basic logger for our startup patches
@@ -141,6 +150,20 @@ litellm.model_cost["mistral/mistral-vibe-cli-latest"] = {
 }
 litellm.model_cost["mistral"] = litellm.model_cost["mistral/mistral-vibe-cli-latest"]
 logger.info("Successfully registered mistral/mistral-vibe-cli-latest tool capability.")
+
+litellm.model_cost["mistral/mistral-large-4"] = {
+	"mode": "chat",
+	"litellm_provider": "mistral",
+	"supports_function_calling": True,
+	"supports_tool_choice": True,
+	"supports_parallel_function_calling": True,
+	"supports_vision": True,
+	"max_input_tokens": 128000,
+	"max_output_tokens": 16384,
+	"max_tokens": 128000,
+}
+litellm.model_cost["mistral-large-4"] = litellm.model_cost["mistral/mistral-large-4"]
+logger.info("Successfully registered mistral/mistral-large-4 tool capability.")
 
 litellm.model_cost["zai/glm-5.1"] = {
 	"mode": "chat",
@@ -512,6 +535,98 @@ _patch_chatgpt_fake_stream()
 logger.info("Patched ChatGPT responses config to disable fake_stream for chatgpt/gpt-5.x.")
 
 
+def _patch_responses_stream_collect_merge():
+	"""Merge streamed output items into the collected non-stream response.
+
+	2026-09: the Codex backend stopped including `output` in the final
+	`response.completed` SSE event (the items still arrive via
+	`response.output_item.done`). For a non-streaming client request the
+	chatgpt provider forces upstream stream=true, the bridge aggregates the
+	stream in _collect_response_from_stream(_async), which takes the completed
+	event's response payload verbatim — producing output=[] and the bridge then
+	raises "Unknown items in responses API response: []". Collect the
+	output_item.done payloads while draining the stream and inject them when
+	the completed response has no output.
+	"""
+	try:
+		from litellm.completion_extras.litellm_responses_transformation.handler import (
+			ResponsesToCompletionBridgeHandler,
+		)
+		from litellm.types.llms.openai import ResponsesAPIResponse, ResponsesAPIStreamEvents
+	except Exception:
+		return
+
+	def _merge(response, items):
+		try:
+			out = getattr(response, "output", None)
+			if (out is None or len(out) == 0) and items:
+				try:
+					response.output = items
+				except Exception:
+					if hasattr(response, "model_copy"):
+						response = response.model_copy(update={"output": items})
+		except Exception:
+			pass
+		return response
+
+	def _extract_done_item(chunk):
+		try:
+			c_type = chunk.get("type") if isinstance(chunk, dict) else getattr(chunk, "type", None)
+			if c_type == ResponsesAPIStreamEvents.OUTPUT_ITEM_DONE:
+				return chunk.get("item") if isinstance(chunk, dict) else getattr(chunk, "item", None)
+		except Exception:
+			pass
+		return None
+
+	def _tee(stream_iter, items):
+		for chunk in stream_iter:
+			item = _extract_done_item(chunk)
+			if item is not None:
+				items.append(item)
+			yield chunk
+
+	def _finish(self, stream_iter, items):
+		# mirrors _collect_response_from_stream, reading state from the ORIGINAL
+		# iterator (a tee generator does not carry .completed_response)
+		completed = getattr(stream_iter, "completed_response", None)
+		response_obj = getattr(completed, "response", None) if completed else None
+		if response_obj is None:
+			raise ValueError("Stream ended without a completed response")
+		hidden_params = getattr(stream_iter, "_hidden_params", None)
+		response = self._coerce_response_object(response_obj, hidden_params)
+		if not isinstance(response, ResponsesAPIResponse):
+			raise ValueError("Stream completed response is invalid")
+		return _merge(response, items)
+
+	def _patched_collect(self, stream_iter):
+		items = []
+		for _ in _tee(stream_iter, items):
+			pass
+		return _finish(self, stream_iter, items)
+
+	async def _patched_collect_async(self, stream_iter):
+		items = []
+		async def _tee_async():
+			async for chunk in stream_iter:
+				item = _extract_done_item(chunk)
+				if item is not None:
+					items.append(item)
+				yield chunk
+		async for _ in _tee_async():
+			pass
+		return _finish(self, stream_iter, items)
+
+	ResponsesToCompletionBridgeHandler._collect_response_from_stream = _patched_collect
+	ResponsesToCompletionBridgeHandler._collect_response_from_stream_async = _patched_collect_async
+	logger.info("Patched responses stream collection to merge Codex output items into completed response.")
+
+
+try:
+	_patch_responses_stream_collect_merge()
+except Exception as e:
+	logger.warning("Could not patch responses stream collection merge: %s", e)
+
+
 litellm.model_cost["scaleway/gpt-oss-120b"] = {
 	"mode": "chat",
 	"litellm_provider": "scaleway",
@@ -587,6 +702,11 @@ for _chatgpt_model, _chatgpt_context, _chatgpt_output_cap in (
 	("chatgpt/gpt-5.6-sol", 1_050_000, 128000),
 	("chatgpt/gpt-5.6-terra", 1_050_000, 128000),
 	("chatgpt/gpt-5.6-luna", 1_050_000, 128000),
+	("chatgpt/gpt-6-sol", 1_050_000, 128000),
+	("chatgpt/gpt-6-luna", 1_050_000, 128000),
+	("chatgpt/gpt-6-astra", 1_050_000, 128000),
+	("chatgpt/sol-6.1", 1_050_000, 128000),
+	("chatgpt/gpt-6.1-sol", 1_050_000, 128000),
 ):
 	_register_chatgpt_responses_model(
 		_chatgpt_model,
@@ -701,6 +821,19 @@ try:
 			and isinstance(api_key, str)
 			and api_key.startswith(ANTHROPIC_OAUTH_TOKEN_PREFIX)
 		):
+			# Resolve the host-refreshed primary at dispatch; router deployments
+			# still carry the credential captured when their config was loaded.
+			if api_key == os.getenv("CLAUDE_CODE_OAUTH_TOKEN") or api_key == "sk-ant-oat-file-placeholder":
+				try:
+					from ccproxy_callback import _get_live_oauth_token
+					resolved_token = _get_live_oauth_token("anthropic")
+					if resolved_token:
+						api_key = resolved_token
+				except Exception as exc:
+					logger.warning("Could not resolve live Claude OAuth token: %s", exc)
+					fb = os.getenv("ANTHROPIC_FALLBACK_TOKEN")
+					if fb:
+						api_key = fb
 			for key in list(headers):
 				if isinstance(key, str) and key.lower() in {"authorization", "x-api-key"}:
 					headers.pop(key, None)
@@ -2339,8 +2472,13 @@ try:
 		raw_response,
 		logging_obj,
 	):
+		# 2026-09: the Codex backend dropped Content-Type on 200 SSE responses.
+		# Check body text if already read without forcing reads on unread streams.
 		content_type = (raw_response.headers or {}).get("content-type", "")
-		body_text = raw_response.text or ""
+		try:
+			body_text = raw_response.text or ""
+		except Exception:
+			body_text = ""
 		looks_like_sse = (
 			"text/event-stream" in content_type.lower()
 			or body_text.lstrip().startswith(("event:", "data:"))
@@ -2353,7 +2491,7 @@ try:
 			)
 
 		logging_obj.post_call(
-			original_response=raw_response.text,
+			original_response=body_text,
 			additional_args={"complete_input_dict": {}},
 		)
 
@@ -2903,10 +3041,42 @@ except Exception as e:
 #       Although **kwargs creates a new dict per call in most paths, we harden the
 #       functions so they never crash on missing keys.
 try:
+	import time as _quota_cb_time
 	from litellm.router_utils.fallback_event_handlers import (
 		run_async_fallback as _orig_run_async_fallback,
 	)
 	from litellm.router import Router
+
+	# In-memory circuit breaker for non-Anthropic deployments that return hard
+	# quota/billing/eligibility errors (e.g. Z.ai weekly limit, Moonshot 5h limit,
+	# OpenCode Go limit, Mistral Vibe 402 budget exhausted, QwenCloud access denied).
+	# Prevents every request from burning 8-11 fallback hops x 3 retries (~350-550s)
+	# when upstream provider quotas are exhausted.
+	_QUOTA_CIRCUIT_BREAKER: dict[tuple[str, str, str], tuple[float, str]] = {}
+	_HARD_QUOTA_ERROR_MARKERS: tuple[tuple[str, float], ...] = (
+		("weekly/monthly limit exhausted", 1800.0),
+		("vibe budget exhausted", 1800.0),
+		("billing_vibe_budget_exhausted", 1800.0),
+		("access to model denied", 1800.0),
+		("not eligible for using the model", 1800.0),
+		("insufficient_quota", 1800.0),
+		("insufficient balance", 1800.0),
+		("5-hour usage limit", 600.0),
+		("go usage limit exceeded", 600.0),
+	)
+
+	def _is_anthropic_or_claude_deployment(dep_key: tuple[str, str, str]) -> bool:
+		combined = " ".join(dep_key).lower()
+		return "anthropic" in combined or "claude" in combined
+
+	def _match_hard_quota_marker(exc: BaseException) -> tuple[str, float] | None:
+		msg = str(exc or "").lower()
+		if not msg:
+			return None
+		for marker, ttl in _HARD_QUOTA_ERROR_MARKERS:
+			if marker in msg:
+				return marker, ttl
+		return None
 
 	async def _patched_run_async_fallback(
 		*args,
@@ -2922,6 +3092,14 @@ try:
 		for key in ("metadata", "litellm_metadata"):
 			if kwargs.get(key) is None:
 				kwargs[key] = {}
+		# Prevent exponential DFS fallback recursion across cross-referenced model
+		# groups: each root model group in litellm.yaml already declares its full
+		# ordered fallback chain. Only primary claude-* groups reached at depth 1
+		# may take one additional hop to their fallback-claude-* mirror.
+		fb_group_str = str(fallback_model_group or "")
+		if isinstance(fallback_depth, int) and fallback_depth >= 1:
+			if not (fallback_depth == 1 and fb_group_str.startswith("claude-")):
+				kwargs["disable_fallbacks"] = True
 		return await _orig_run_async_fallback(
 			*args,
 			litellm_router=litellm_router,
@@ -2937,6 +3115,42 @@ try:
 	import litellm.router_utils.fallback_event_handlers as _fallback_mod2
 
 	_fallback_mod2.run_async_fallback = _patched_run_async_fallback
+
+	_original_set_dep_retries = getattr(Router, "_set_deployment_num_retries_on_exception", None)
+	if callable(_original_set_dep_retries):
+		def _patched_set_deployment_num_retries_on_exception(self, e, deployment):
+			_original_set_dep_retries(self, e, deployment)
+			if isinstance(deployment, dict):
+				params = deployment.get("litellm_params") or {}
+				dep_key = (
+					str(deployment.get("model_name") or ""),
+					str(params.get("model") or ""),
+					str(params.get("api_base") or ""),
+				)
+				if not _is_anthropic_or_claude_deployment(dep_key):
+					matched = _match_hard_quota_marker(e)
+					if matched is not None:
+						marker, ttl = matched
+						_QUOTA_CIRCUIT_BREAKER[dep_key] = (_quota_cb_time.monotonic() + ttl, marker)
+						setattr(e, "num_retries", 0)
+						setattr(e, "_nexgate_no_retry", True)
+						logger.warning(
+							"[NexGate Quota Circuit Breaker] Tripped %s for %ds on '%s'",
+							dep_key[0] or dep_key[1],
+							int(ttl),
+							marker,
+						)
+
+		Router._set_deployment_num_retries_on_exception = _patched_set_deployment_num_retries_on_exception
+
+	_original_should_retry = getattr(Router, "should_retry_this_error", None)
+	if callable(_original_should_retry):
+		def _patched_should_retry_this_error(self, error, *args, **kwargs):
+			if getattr(error, "_nexgate_no_retry", False) or _match_hard_quota_marker(error) is not None:
+				raise error
+			return _original_should_retry(self, error, *args, **kwargs)
+
+		Router.should_retry_this_error = _patched_should_retry_this_error
 
 	_original_retries = Router.async_function_with_retries
 
@@ -2967,7 +3181,7 @@ try:
 		return await _original_retries(self, *args, **kwargs)
 
 	Router.async_function_with_retries = _patched_async_function_with_retries
-	logger.info("Hardened fallback recursion against upstream KeyError bugs.")
+	logger.info("Hardened fallback recursion and installed quota circuit breaker.")
 except Exception as e:
 	logger.error(f"Failed to harden fallback recursion: {e}", exc_info=True)
 
@@ -2982,6 +3196,47 @@ try:
 	from litellm.router import Router
 
 	_original_update_kwargs_with_deployment = Router._update_kwargs_with_deployment
+
+	# When custom pre-call context window rejection is disabled, skip LiteLLM's
+	# internal per-hop tiktoken pre-call token counter as well so 100k+ token
+	# requests do not burn CPU across worker threads and the event loop.
+	if not _ENFORCE_CUSTOM_CONTEXT_CHECK and hasattr(Router, "_pre_call_checks_need_token_count"):
+		Router._pre_call_checks_need_token_count = lambda self, model, healthy_deployments: False
+
+	def _fast_estimate_prompt_tokens(messages, kwargs=None):
+		"""O(N) character-based token estimate cached per request on metadata."""
+		meta = kwargs.get("metadata") if isinstance(kwargs, dict) else None
+		msg_len = len(messages) if isinstance(messages, list) else 0
+		if isinstance(meta, dict):
+			cached = meta.get("_nexgate_est_prompt_tokens")
+			if isinstance(cached, tuple) and len(cached) == 2 and cached[0] == msg_len:
+				return cached[1]
+		char_count = 0
+		try:
+			for msg in messages:
+				if not isinstance(msg, dict):
+					continue
+				content = msg.get("content", "")
+				if isinstance(content, str):
+					char_count += len(content)
+				elif isinstance(content, list):
+					for item in content:
+						if isinstance(item, dict):
+							char_count += len(item.get("text", "") or "")
+							if item.get("type") == "image":
+								char_count += 4000
+							elif item.get("type") in ("tool_use", "tool_result"):
+								inner = item.get("input") if item.get("type") == "tool_use" else item.get("content")
+								if isinstance(inner, str):
+									char_count += len(inner)
+						elif isinstance(item, str):
+							char_count += len(item)
+		except Exception:
+			pass
+		est = max(1, char_count // 3)
+		if isinstance(meta, dict):
+			meta["_nexgate_est_prompt_tokens"] = (msg_len, est)
+		return est
 
 	def _sanitize_messages_for_token_counter(messages):
 		if not isinstance(messages, list):
@@ -3072,6 +3327,30 @@ try:
 		
 		# Enforce deployment-level parameters (extra_headers/extra_body) to prevent shallow dict override bugs
 		params = deployment.get("litellm_params", {}) if isinstance(deployment, dict) else {}
+		if isinstance(deployment, dict):
+			dep_key = (
+				str(deployment.get("model_name") or ""),
+				str(params.get("model") or ""),
+				str(params.get("api_base") or ""),
+			)
+			if not _is_anthropic_or_claude_deployment(dep_key):
+				tripped = _QUOTA_CIRCUIT_BREAKER.get(dep_key)
+				if tripped is not None:
+					expires_at, reason = tripped
+					now = _quota_cb_time.monotonic()
+					if now < expires_at:
+						err = litellm.RateLimitError(
+							message=(
+								f"[NexGate Quota Circuit Breaker] Skipping {dep_key[0] or dep_key[1]} "
+								f"(cooldown {int(expires_at - now)}s remaining for '{reason}')"
+							),
+							model=dep_key[1] or dep_key[0],
+							llm_provider="openai",
+						)
+						setattr(err, "num_retries", 0)
+						setattr(err, "_nexgate_no_retry", True)
+						raise err
+					_QUOTA_CIRCUIT_BREAKER.pop(dep_key, None)
 		for key in ("extra_headers", "extra_body"):
 			dep_dict = params.get(key)
 			if isinstance(dep_dict, dict) and dep_dict:
@@ -3135,7 +3414,7 @@ try:
 				elif "gemma" in litellm_model_lower or "gemma" in model_name_lower:
 					context_window = 131072
 				elif "bielik" in litellm_model_lower or "bielik" in model_name_lower:
-					context_window = 16384
+					context_window = 32768
 				elif "glm-5.2[1m]" in litellm_model_lower or "glm-5.2[1m]" in model_name_lower or "glm-5.2" in litellm_model_lower or "glm-5.2" in model_name_lower:
 					context_window = 1000000
 				elif "glm" in litellm_model_lower or "glm" in model_name_lower:
@@ -3146,12 +3425,6 @@ try:
 					context_window = 200000
 
 			import sys
-			print(
-				f"[sitecustomize] Enforcing context window check for deployment={model_name}, "
-				f"litellm_model={litellm_model}, context_window={context_window}",
-				file=sys.stderr,
-				flush=True,
-			)
 
 			if context_window:
 				# Resolve messages by checking kwargs, then walking up the stack frames
@@ -3166,8 +3439,6 @@ try:
 							messages = frame.f_locals["kwargs"]["messages"]
 							break
 						frame = frame.f_back
-				
-				print(f"[sitecustomize] Resolved messages from stack frame/kwargs: {messages is not None} (kwargs keys: {list(kwargs.keys()) if isinstance(kwargs, dict) else type(kwargs)})", file=sys.stderr, flush=True)
 
 				if messages:
 					# Move the initial system message out of messages[0] for Anthropic.
@@ -3214,44 +3485,21 @@ try:
 									kwargs["system"] = content
 
 							messages.pop(0)
-							print("[sitecustomize] Normalized initial system message from messages[0] to top-level system", file=sys.stderr, flush=True)
 					except Exception as norm_exc:
-						print(f"[sitecustomize] Warning: system message normalization failed: {norm_exc}", file=sys.stderr, flush=True)
+						logger.debug("system message normalization failed: %s", norm_exc)
 
-					try:
-						sanitized_messages = _sanitize_messages_for_token_counter(messages)
-						prompt_tokens = litellm.token_counter(model=litellm_model, messages=sanitized_messages)
-					except Exception as tc_exc:
-						print(f"[sitecustomize] Warning: token_counter failed for model={litellm_model}: {tc_exc}", file=sys.stderr, flush=True)
+					if _ENFORCE_CUSTOM_CONTEXT_CHECK:
 						try:
-							print(f"[sitecustomize] Debug messages type: {type(messages)}, len: {len(messages) if isinstance(messages, list) else 'N/A'}", file=sys.stderr, flush=True)
-							if messages and isinstance(messages, list):
-								for idx, m in enumerate(messages[:3]):
-									print(f"[sitecustomize] Debug msg[{idx}] type: {type(m)}, content type: {type(m.get('content')) if isinstance(m, dict) else 'N/A'}", file=sys.stderr, flush=True)
-									if isinstance(m, dict) and isinstance(m.get('content'), list):
-										print(f"[sitecustomize] Debug msg[{idx}] content items: {[type(item) for item in m.get('content')]}", file=sys.stderr, flush=True)
-						except Exception as dbg_err:
-							print(f"[sitecustomize] Debug print failed: {dbg_err}", file=sys.stderr, flush=True)
-						# Fallback simple estimation: 1 token per 3 characters of text content
-						try:
-							char_count = 0
-							for msg in messages:
-								content = msg.get("content", "")
-								if isinstance(content, str):
-									char_count += len(content)
-								elif isinstance(content, list):
-									for item in content:
-										if isinstance(item, dict):
-											char_count += len(item.get("text", ""))
-											if item.get("type") == "image":
-												char_count += 4000
-										elif isinstance(item, str):
-											char_count += len(item)
-							prompt_tokens = max(1, char_count // 3)
-							print(f"[sitecustomize] Fallback prompt tokens estimated: {prompt_tokens}", file=sys.stderr, flush=True)
-						except Exception as est_exc:
-							print(f"[sitecustomize] Fallback estimation failed: {est_exc}", file=sys.stderr, flush=True)
-							prompt_tokens = 0
+							sanitized_messages = _sanitize_messages_for_token_counter(messages)
+							prompt_tokens = litellm.token_counter(model=litellm_model, messages=sanitized_messages)
+						except Exception:
+							prompt_tokens = _fast_estimate_prompt_tokens(messages, kwargs)
+					else:
+						# Fast O(N) cached character estimate avoids blocking the main
+						# asyncio event loop with tiktoken + deep message copies on
+						# 100k+ token requests and fallback hops.
+						prompt_tokens = _fast_estimate_prompt_tokens(messages, kwargs)
+
 					requested_max_tokens = kwargs.get("max_tokens")
 					if requested_max_tokens is None:
 						requested_max_tokens = params.get("max_tokens") or 4096
@@ -3264,34 +3512,14 @@ try:
 							requested_max_tokens = 4096
 
 					available_tokens = context_window - prompt_tokens
-					print(
-						f"[sitecustomize] Prompt tokens calculated: {prompt_tokens}, "
-						f"requested max_tokens: {requested_max_tokens}, available tokens: {available_tokens}",
-						file=sys.stderr,
-						flush=True,
-					)
 
-					if available_tokens < 1:
-						if _ENFORCE_CUSTOM_CONTEXT_CHECK:
-							print(
-								f"[sitecustomize] Prompt tokens ({prompt_tokens}) exceed context window ({context_window}) "
-								f"for model {model_name}. Raising ContextWindowExceededError.",
-								file=sys.stderr,
-								flush=True,
-							)
-							raise litellm.ContextWindowExceededError(
-								message=f"Prompt tokens ({prompt_tokens}) exceed model context window ({context_window}) for deployment {model_name}",
-								model=model_name,
-								llm_provider=""
-							)
-						# Rejection disabled: leave max_tokens to the clamp below or the backend.
-						print(
-							f"[sitecustomize] Prompt tokens ({prompt_tokens}) exceed declared context window ({context_window}) "
-							f"but rejection disabled; will not raise.",
-							file=sys.stderr,
-							flush=True,
+					if available_tokens < 1 and _ENFORCE_CUSTOM_CONTEXT_CHECK:
+						raise litellm.ContextWindowExceededError(
+							message=f"Prompt tokens ({prompt_tokens}) exceed model context window ({context_window}) for deployment {model_name}",
+							model=model_name,
+							llm_provider=""
 						)
-						# Clamp max_tokens to the remaining budget. Only when there IS a
+					# Clamp max_tokens to the remaining budget. Only when there IS a
 					# remaining budget — when the prompt already overflows and rejection
 					# is disabled, leave it untouched so the backend (or configured
 					# context_window_fallbacks) handles the overflow instead of forcing
@@ -3300,23 +3528,19 @@ try:
 						target_val = min(available_tokens, params.get("max_tokens") or available_tokens)
 						if target_val < 1:
 							target_val = 1
-						print(f"[sitecustomize] Adjusting max_tokens from {requested_max_tokens} to {target_val}", file=sys.stderr, flush=True)
 						kwargs["max_tokens"] = target_val
 					elif available_tokens < 1:
 						# When prompt overflows declared context window and rejection is disabled,
 						# force max_tokens to a valid positive default so upstream/LiteLLM
 						# cannot compute negative max_tokens (-239344).
 						safe_default = int(params.get("max_tokens") or 1024)
-						print(f"[sitecustomize] Prompt overflow: overriding max_tokens to safe positive default {safe_default}", file=sys.stderr, flush=True)
 						kwargs["max_tokens"] = safe_default
 						if "max_completion_tokens" in kwargs and isinstance(kwargs["max_completion_tokens"], (int, float)) and kwargs["max_completion_tokens"] < 1:
 							kwargs["max_completion_tokens"] = safe_default
 		except litellm.ContextWindowExceededError:
 			raise
 		except Exception as e:
-			print(f"[sitecustomize] Failed to check context window size: {e}", file=sys.stderr, flush=True)
-			import traceback
-			traceback.print_exc(file=sys.stderr)
+			logger.debug("Failed to check context window size: %s", e)
 
 		# Extra safety clamp to guarantee positive max_tokens and max_completion_tokens under all circumstances
 		try:
@@ -3327,7 +3551,6 @@ try:
 						val = int(field_val)
 						if val < 1:
 							target_val = int(params.get(token_field) or 1024)
-							print(f"[sitecustomize] Safety-clamping invalid {token_field}={val} to {target_val}", file=sys.stderr, flush=True)
 							kwargs[token_field] = target_val
 						else:
 							kwargs[token_field] = val
@@ -3353,15 +3576,9 @@ try:
 					and isinstance(value, (int, float))
 					and value > provider_output_cap
 				):
-					print(
-						f"[sitecustomize] Applying provider output cap for deployment={model_name}, "
-						f"litellm_model={litellm_model}: {token_field} {value} -> {provider_output_cap}",
-						file=sys.stderr,
-						flush=True,
-					)
 					kwargs[token_field] = provider_output_cap
 		except Exception as cap_exc:
-			print(f"[sitecustomize] Failed to apply provider output cap: {cap_exc}", file=sys.stderr, flush=True)
+			logger.debug("Failed to apply provider output cap: %s", cap_exc)
 
 		if kwargs.get("stream") is not True or kwargs.get("stream_timeout") is not None:
 			return
@@ -3427,6 +3644,8 @@ try:
 
 	def _strip_postgres_nuls(value):
 		if isinstance(value, str):
+			if "\x00" not in value and "\\u0000" not in value and "\\U0000" not in value:
+				return value
 			return _pg_nul_escape_re.sub("", value.replace("\x00", ""))
 		if isinstance(value, list):
 			return [_strip_postgres_nuls(item) for item in value]
@@ -3440,8 +3659,9 @@ try:
 			}
 		return value
 
-	def _coerce_spend_log_json_field(value):
-		value = _strip_postgres_nuls(value)
+	def _coerce_spend_log_json_field(value, _already_stripped=False):
+		if not _already_stripped:
+			value = _strip_postgres_nuls(value)
 		if value is None:
 			return {}
 		if isinstance(value, str):
@@ -3465,7 +3685,7 @@ try:
 			return data
 		for key in _spend_log_json_fields:
 			if key in data:
-				data[key] = _coerce_spend_log_json_field(data[key])
+				data[key] = _coerce_spend_log_json_field(data[key], _already_stripped=True)
 		return data
 
 	def _patched_jsonify_object(self, data):
@@ -3560,14 +3780,21 @@ try:
 	_CLAUDE_PRIMARY_MODEL_GROUPS = {
 		"claude-chat",
 		"claude-haiku-4-5-20251001",
+		"claude-haiku-5-5",
+		"claude-haiku-5-5[1m]",
+		"haiku-5-5",
 		"claude-opus-4-8",
 		"claude-opus-4-8[1m]",
 		"opus[1m]",
-		"claude-sonnet-4-6",
 		"claude-opus-5",
 		"claude-opus-5[1m]",
+		"claude-opus-5-5",
+		"claude-opus-5-5[1m]",
+		"claude-sonnet-4-6",
 		"claude-sonnet-5",
 		"claude-sonnet-5[1m]",
+		"claude-sonnet-5-5",
+		"claude-sonnet-5-5[1m]",
 		"claude-fable-5-1",
 	}
 	_ORIGINAL_ROUTE_REQUEST = None
