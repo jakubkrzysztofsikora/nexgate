@@ -71,7 +71,7 @@ def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog = yaml.safe_load(catalog_text)
     # Aliases can carry multiple deployments (e.g. qwen38-heretic on Modal and
     # on a free Colab tier); the portable surface is the distinct alias set.
-    assert len({model["model_name"] for model in catalog["model_list"]}) == 160
+    assert len({model["model_name"] for model in catalog["model_list"]}) == 163
     assert all("model_name" in model and "litellm_params" in model for model in catalog["model_list"])
     # Every alias, including the free-GPU tier, must wire its endpoint through
     # the operator's ignored .env: the public catalog ships no endpoints.
@@ -178,6 +178,17 @@ def test_provider_matrix_documents_every_catalog_alias() -> None:
     assert aliases == documented, (
         f"undocumented: {sorted(aliases - documented)}; stale: {sorted(documented - aliases)}"
     )
+
+
+def test_minimax_m3_flash_route_is_env_parametrized() -> None:
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    routes = [m for m in catalog["model_list"] if m["model_name"] == "minimax-m3-flash"]
+    assert len(routes) == 1
+    params = routes[0]["litellm_params"]
+    assert params["model"] == "openai/MiniMax-M3.1-Flash"
+    assert params["api_base"] == "os.environ/NEXGATE_MINIMAX_M3_FLASH_API_BASE"
+    assert params["api_key"] == "os.environ/MINIMAX_API_KEY"
+    assert routes[0]["model_info"]["context_window"] == 1000000
 
 
 def test_every_fallback_target_resolves_to_a_defined_model() -> None:

@@ -44,6 +44,8 @@ and proves gateway transport, not a live research provider's answer quality.
 | `deepseek-v4-pro[1m]` | `DEEPSEEK_API_KEY`, `NEXGATE_DEEPSEEK_V4_PRO_1M_API_BASE` |
 | `gemma` | `NEXGATE_GEMMA_API_BASE` |
 | `coopforge/bielik-minitron-7b` | `NEXGATE_COOPFORGE_BIELIK_API_BASE`, `NEXGATE_COOPFORGE_BIELIK_API_KEY` (alias: `bielik`) |
+| `coopforge/bielik-agentic-11b` | `NEXGATE_COOPFORGE_BIELIK_API_BASE`, `NEXGATE_COOPFORGE_BIELIK_AGENTIC_API_KEY` |
+| `coopforge/bielik-decide` | `NEXGATE_COOPFORGE_BIELIK_API_BASE`, `NEXGATE_COOPFORGE_BIELIK_AGENTIC_API_KEY` |
 | `psyllm-4b` | `NEXGATE_PSYLLM_4B_API_BASE`, `PSYLLM_SERVER_API_KEY` |
 | `glm-5.1` | `NEXGATE_GLM_5_1_API_BASE`, `ZAI_API_KEY` |
 | `glm-5.2` | `NEXGATE_GLM_5_2_API_BASE`, `ZAI_API_KEY` |
@@ -70,6 +72,7 @@ and proves gateway transport, not a live research provider's answer quality.
 | `kimi` | `KIMI_CODE_API_BASE`, `KIMI_CODE_API_KEY` |
 | `kimi-k3` | `KIMI_CODE_API_BASE`, `KIMI_CODE_API_KEY` |
 | `minimax-m3` | `MINIMAX_API_KEY`, `NEXGATE_MINIMAX_M3_API_BASE` |
+| `minimax-m3-flash` | `MINIMAX_API_KEY`, `NEXGATE_MINIMAX_M3_FLASH_API_BASE` |
 | `mistral` | `MISTRAL_API_KEY` |
 | `scaleway/gpt-oss` | `NEXGATE_SCALEWAY_GPT_OSS_API_BASE`, `SCW_SECRET_KEY` |
 | `scaleway/glm-5.3` | `NEXGATE_SCALEWAY_GLM_5_3_API_BASE`, `SCW_SECRET_KEY` |

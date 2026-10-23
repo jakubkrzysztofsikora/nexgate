@@ -504,6 +504,7 @@ router_settings:
   # (kimi/qwen/glm/minimax) when the secondary credential is also limited.
   - coopforge/bielik-minitron-7b: []
   - coopforge/bielik-agentic-11b: []
+  - coopforge/bielik-decide: []
   - fallback-claude-opus-4-8: []
   - fallback-claude-opus-4-8[1m]: []
   - fallback-claude-opus-4-7: []
@@ -1617,6 +1618,23 @@ model_list:
     supports_tool_choice: true
     supports_parallel_function_calling: true
     disable_background_health_check: true
+- model_name: coopforge/bielik-decide
+  litellm_params:
+    model: openai/bielik-decide
+    api_base: os.environ/NEXGATE_COOPFORGE_BIELIK_API_BASE
+    api_key: os.environ/NEXGATE_COOPFORGE_BIELIK_AGENTIC_API_KEY
+    drop_params: true
+    disable_fallbacks: true
+    num_retries: 0
+    additional_drop_params:
+    - web_search_options
+    max_tokens: 2048
+    region_name: eu
+  model_info:
+    context_window: 32768
+    supports_function_calling: true
+    supports_tool_choice: true
+    disable_background_health_check: true
 - model_name: psyllm-4b
   litellm_params:
     model: openai/psyllm-4b
@@ -2406,6 +2424,30 @@ model_list:
     num_retries: 2
   model_info:
     context_window: 1048576
+    supports_function_calling: true
+    supports_tool_choice: true
+    supports_parallel_function_calling: true
+    disable_background_health_check: true
+- model_name: minimax-m3-flash
+  litellm_params:
+    model: openai/MiniMax-M3.1-Flash
+    api_base: os.environ/NEXGATE_MINIMAX_M3_FLASH_API_BASE
+    api_key: os.environ/MINIMAX_API_KEY
+    custom_llm_provider: openai
+    parse_tool_call_from_content: true
+    drop_params: true
+    additional_drop_params:
+    - output_config
+    - web_search_options
+    - max_completion_tokens
+    allowed_openai_params:
+    - tools
+    - tool_choice
+    max_tokens: 32000
+    timeout: 180
+    num_retries: 2
+  model_info:
+    context_window: 1000000
     supports_function_calling: true
     supports_tool_choice: true
     supports_parallel_function_calling: true
