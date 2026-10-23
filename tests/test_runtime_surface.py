@@ -28,6 +28,19 @@ def test_litellm_image_keeps_existing_compatibility_modules() -> None:
         assert name in compose
 
 
+def test_kimi_code_routes_send_honest_identity() -> None:
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    offenders = []
+    for model in catalog["model_list"]:
+        params = model.get("litellm_params") or {}
+        if params.get("model") != "moonshot/k3":
+            continue
+        ua = (params.get("extra_headers") or {}).get("User-Agent")
+        if ua and "claude-code" in str(ua).lower():
+            offenders.append(model["model_name"])
+    assert not offenders, f"kimi routes fake a Claude client identity: {offenders}"
+
+
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)
