@@ -39,7 +39,7 @@ Four Python homes, three roles:
 | Home | Role |
 | --- | --- |
 | `runtime/config/sitecustomize.py` | Litellm boot patch script. Linear, order-sensitive, import-time side effects; deliberately not split (see plan ledger 2026-10-23: `logger` binds 50/91 top-level statements, no cohesive clusters). |
-| `runtime/config/ccproxy_callback.py` + `runtime/config/ccshims/` | Request-path callbacks. `ccproxy_callback.py` is a 20-line import facade; the modules (`const`, `tele`, `oauth`, `repair`, `hdr`, `utility`, `usage`, `handler`) carry the code, and module-owned state (OAuth cooldowns, token cache, telemetry queue) lives in `ccshims.oauth`. Heavy groups are lazy-imported at call time. |
+| `runtime/config/ccproxy_callback.py` + `runtime/config/ccshims/` | Request-path callbacks. `ccproxy_callback.py` is a facade that imports and re-exports the package (~270 lines, mostly re-export lists; importing it eagerly loads all groups, with a few heavy names deferred to per-call imports inside functions). Module-owned state: OAuth cooldowns and token caches in `ccshims.oauth`, the telemetry queue in `ccshims.const`, telemetry-writer and model-map state in `ccshims.tele`. |
 | `runtime/config/claude_aware_compression.py` | Context-window compression safety valve. |
 | `scripts/` | Host-side tooling: config renderer, provider status probes, gateway setup. |
 

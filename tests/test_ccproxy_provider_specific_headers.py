@@ -57,27 +57,29 @@ def load_callback_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     return module
 
 
-STATE_NAMES = {
-    "_anthropic_primary_cooldown_until",
-    "_OAUTH_TOKEN_CACHE",
-    "_ANTHROPIC_FILE_TOKEN_CACHE",
-    "_anthropic_token_state_lock",
+STATE_OWNERS = {
+    "_anthropic_primary_cooldown_until": "oauth",
+    "_OAUTH_TOKEN_CACHE": "oauth",
+    "_ANTHROPIC_FILE_TOKEN_CACHE": "oauth",
+    "_anthropic_token_state_lock": "oauth",
 }
 
 
 class _StateForwarding:
-    def __init__(self, base: object, state: object) -> None:
+    def __init__(self, base: object, owners: dict[str, object]) -> None:
         object.__setattr__(self, "_base", base)
-        object.__setattr__(self, "_state", state)
+        object.__setattr__(self, "_owners", owners)
 
     def __getattr__(self, name: str) -> object:
-        if name in STATE_NAMES:
-            return getattr(self._state, name)
+        owner = self._owners.get(name)
+        if owner is not None:
+            return getattr(owner, name)
         return getattr(self._base, name)
 
     def __setattr__(self, name: str, value: object) -> None:
-        if name in STATE_NAMES:
-            setattr(self._state, name, value)
+        owner = self._owners.get(name)
+        if owner is not None:
+            setattr(owner, name, value)
         else:
             setattr(self._base, name, value)
 
@@ -87,10 +89,11 @@ def callback(monkeypatch: pytest.MonkeyPatch):
     module = load_callback_module(monkeypatch)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", PRIMARY_TOKEN)
     monkeypatch.delenv("ANTHROPIC_FALLBACK_TOKEN", raising=False)
-    monkeypatch.setattr(module, "_OAUTH_TOKEN_CACHE", {})
-    monkeypatch.setattr(module, "_anthropic_primary_cooldown_until", 0.0)
-    import ccshims.oauth as state
-    return _StateForwarding(module, state)
+    import ccshims.oauth
+    owners = {name: getattr(ccshims, mod) for name, mod in STATE_OWNERS.items()}
+    monkeypatch.setattr(ccshims.oauth, "_OAUTH_TOKEN_CACHE", {})
+    monkeypatch.setattr(ccshims.oauth, "_anthropic_primary_cooldown_until", 0.0)
+    return _StateForwarding(module, owners)
 
 
 def _scoped_list() -> list[dict]:

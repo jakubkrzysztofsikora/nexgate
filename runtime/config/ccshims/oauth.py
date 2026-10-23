@@ -5,8 +5,8 @@ import os
 import subprocess
 import threading
 import time
-from ccshims.tele import _trust_request_model_group
 from ccshims.const import _ANTHROPIC_API_BASE, _CLAUDE_FALLBACK_MODEL_GROUPS, _CLAUDE_ONE_MILLION_CONTEXT_BETA, _CLAUDE_ONE_MILLION_CONTEXT_MODELS, _CLAUDE_PRIMARY_MODEL_GROUPS, _CLAUDE_PRIMARY_PROVIDER_MODELS, _TOOL_VALIDATION_LOGGER
+from ccshims.tele import _trust_request_model_group
 
 
 def _get_oauth_refresh_ttl_seconds() -> float:

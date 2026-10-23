@@ -163,6 +163,7 @@ def real_proxy(tmp_path_factory, pinned_image):
                   "-v", f"{ROOT / 'scripts/provision-research-agent.py'}:/provision.py:ro"]
         for filename in ("sitecustomize.py", "ccproxy_callback.py", "claude_aware_compression.py", "ccproxy.yaml"):
             mounts += ["-v", f"{ROOT / 'runtime/config' / filename}:/app/{filename}:ro"]
+        mounts += ["-v", f"{ROOT / 'runtime/config/ccshims'}:/app/ccshims:ro"]
         old = start_proxy(baseline, BASELINE_IMAGE, name, mounts, db)
         status, marker = old.request("/key/generate", body={"key_alias": "migration-marker"})
         assert status == 200, {"status": status}

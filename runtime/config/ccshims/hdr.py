@@ -2,10 +2,10 @@
 from typing import Any
 import os
 from ccshims import get_llm_provider
-from ccshims.oauth import _anthropic_oauth_token_for_model, _fallback_depth_from_metadata, _normalize_claude_metadata_model_group
-from ccshims.tele import _load_model_name_to_provider_map, _strip_null_bytes
-from ccshims.repair import _coerce_anthropic_provider_for_sanitization, _required_fields_by_tool, _sanitize_history_tool_calls, _sanitize_model_call_payload
 from ccshims.const import _TOOL_VALIDATION_LOGGER
+from ccshims.oauth import _anthropic_oauth_token_for_model, _fallback_depth_from_metadata, _normalize_claude_metadata_model_group
+from ccshims.repair import _coerce_anthropic_provider_for_sanitization, _required_fields_by_tool, _sanitize_history_tool_calls, _sanitize_model_call_payload
+from ccshims.tele import _load_model_name_to_provider_map, _strip_null_bytes
 
 
 def _drop_header(headers: dict[str, Any], name: str) -> None:

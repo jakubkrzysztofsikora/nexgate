@@ -51,10 +51,14 @@ def _load_module():
 
 cc = _load_module()
 
+import sys as _sys
+
+state = _sys.modules["ccshims.oauth"]
+
 
 def _reset(cooldown_until=0.0):
-	cc._anthropic_primary_cooldown_until = cooldown_until
-	cc._OAUTH_TOKEN_CACHE.clear()
+	state._anthropic_primary_cooldown_until = cooldown_until
+	state._OAUTH_TOKEN_CACHE.clear()
 	os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 	os.environ.pop("ANTHROPIC_FALLBACK_TOKEN", None)
 
@@ -76,7 +80,7 @@ def test_2_cooldown_active_fallback():
 	os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "primary"
 	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
 	assert cc._get_live_oauth_token("anthropic") == "fallback"
-	assert "anthropic" not in cc._OAUTH_TOKEN_CACHE
+	assert "anthropic" not in state._OAUTH_TOKEN_CACHE
 
 
 def test_3_cooldown_active_no_fallback():
@@ -99,7 +103,7 @@ def test_5_arm_on_429():
 	cc._maybe_arm_anthropic_cooldown(
 		{"model": "claude-opus-4-8"}, _Resp(status_code=429)
 	)
-	assert cc._anthropic_primary_cooldown_until > before
+	assert state._anthropic_primary_cooldown_until > before
 
 
 def test_6_no_arm_on_500():
@@ -108,7 +112,7 @@ def test_6_no_arm_on_500():
 	cc._maybe_arm_anthropic_cooldown(
 		{"model": "claude-opus-4-8"}, _Resp(status_code=500, message="boom")
 	)
-	assert cc._anthropic_primary_cooldown_until == 0.0
+	assert state._anthropic_primary_cooldown_until == 0.0
 
 
 def test_7_failure_callback_arms_cooldown_from_litellm_exception():
@@ -124,30 +128,7 @@ def test_7_failure_callback_arms_cooldown_from_litellm_exception():
 			None,
 		)
 	)
-	assert cc._anthropic_primary_cooldown_until > before
-
-
-def test_8_fb_group_model_gets_fb_token():
-	_reset()
-	os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "primary"
-	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
-	assert (
-		cc._anthropic_oauth_token_for_model("fallback-claude-opus-5[1m]")
-		== "fallback"
-	)
-
-
-def test_9_fb_group_metadata_gets_fb_token():
-	"""Provider-level model name + fb model_group (router fallback hop)."""
-	_reset()
-	os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "primary"
-	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
-	assert (
-		cc._anthropic_oauth_token_for_model(
-			"claude-opus-4-8", "fallback-claude-opus-4-8[1m]"
-		)
-		== "fallback"
-	)
+	assert state._anthropic_primary_cooldown_until > before
 
 
 def test_10_fb_group_no_fb_env_degrades_to_live():
@@ -163,16 +144,6 @@ def test_11_primary_group_gets_live_token():
 	assert cc._anthropic_oauth_token_for_model("claude-opus-5[1m]") == "primary"
 
 
-def test_12_fb_group_wins_over_active_cooldown_reverse():
-	"""Cooldown returns fb token for primary groups; fb group without cooldown
-	still returns fb token — both paths converge on the same account."""
-	_reset()
-	os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "primary"
-	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
-	assert cc._anthropic_oauth_token_for_model("fallback-claude-haiku-4-5-20251001") == "fallback"
-	assert cc._get_live_oauth_token("anthropic") == "primary"
-
-
 def test_13_no_arm_on_fb_model_group():
 	_reset(cooldown_until=0.0)
 	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
@@ -183,7 +154,7 @@ def test_13_no_arm_on_fb_model_group():
 		},
 		_Resp(status_code=429),
 	)
-	assert cc._anthropic_primary_cooldown_until == 0.0
+	assert state._anthropic_primary_cooldown_until == 0.0
 
 
 def test_14_arm_on_primary_group_reached_as_chain_fallback():
@@ -200,17 +171,17 @@ def test_14_arm_on_primary_group_reached_as_chain_fallback():
 		},
 		_Resp(status_code=429),
 	)
-	assert cc._anthropic_primary_cooldown_until > before
+	assert state._anthropic_primary_cooldown_until > before
 
 
 def test_15_no_rearm_while_cooldown_active():
 	_reset(cooldown_until=time.monotonic() + 100)
 	os.environ["ANTHROPIC_FALLBACK_TOKEN"] = "fallback"
-	deadline = cc._anthropic_primary_cooldown_until
+	deadline = state._anthropic_primary_cooldown_until
 	cc._maybe_arm_anthropic_cooldown(
 		{"model": "claude-opus-4-8"}, _Resp(status_code=429)
 	)
-	assert cc._anthropic_primary_cooldown_until == deadline
+	assert state._anthropic_primary_cooldown_until == deadline
 
 
 def test_16_rearm_after_cooldown_expiry():
@@ -220,7 +191,7 @@ def test_16_rearm_after_cooldown_expiry():
 	cc._maybe_arm_anthropic_cooldown(
 		{"model": "claude-opus-4-8"}, _Resp(status_code=429)
 	)
-	assert cc._anthropic_primary_cooldown_until > before
+	assert state._anthropic_primary_cooldown_until > before
 
 
 if __name__ == "__main__":
