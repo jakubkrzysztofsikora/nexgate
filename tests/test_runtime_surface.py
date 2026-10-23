@@ -28,6 +28,22 @@ def test_litellm_image_keeps_existing_compatibility_modules() -> None:
         assert name in compose
 
 
+def test_mistral_routes_do_not_fabricate_eu_region() -> None:
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    offenders = []
+    for model in catalog["model_list"]:
+        params = model.get("litellm_params") or {}
+        if not str(params.get("model") or "").startswith("mistral/"):
+            continue
+        if "region_name" in params:
+            offenders.append(model["model_name"])
+    assert not offenders, (
+        f"mistral routes claim eu via inert region_name: {offenders} — "
+        "LiteLLM mistral provider ignores region_name; api.mistral.ai is global; "
+        "real EU needs an api_base of api.eu.mistral.ai"
+    )
+
+
 def test_kimi_code_routes_send_honest_identity() -> None:
     catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
     offenders = []
