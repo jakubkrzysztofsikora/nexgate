@@ -156,12 +156,12 @@ def query_db(sql: str) -> list[dict]:
     cmd = [
         "docker",
         "exec",
-        "litellm_db",
+        os.environ.get("NEXGATE_DB_CONTAINER") or "nexgate-db-1",
         "psql",
         "-U",
-        "llmproxy",
+        os.environ.get("NEXGATE_DB_USER") or "nexgate",
         "-d",
-        "litellm",
+        os.environ.get("NEXGATE_DB_NAME") or "nexgate",
         "-A",
         "-t",
         "-F",
@@ -183,7 +183,7 @@ def query_db(sql: str) -> list[dict]:
 
 def parse_container_logs(stats: dict[str, dict]):
     """Parse docker container logs for real-time rate limit/quota errors and reset timestamps."""
-    cmd = ["docker", "logs", "--since=24h", "nexgate-agent-setup-litellm-1"]
+    cmd = ["docker", "logs", "--since=24h", os.environ.get("NEXGATE_LITELLM_CONTAINER") or "nexgate-litellm-1"]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         lines = res.stdout.splitlines() + res.stderr.splitlines()

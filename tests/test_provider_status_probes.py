@@ -35,6 +35,54 @@ def _catalog_model_names() -> set[str]:
     return {m["model_name"] for m in catalog["model_list"]}
 
 
+class TestMcpProviderStatusContainerTargets:
+    def test_query_db_targets_nexgate_db_container(self, monkeypatch) -> None:
+        module = _load_script("mcp_provider_status")
+        monkeypatch.delenv("NEXGATE_DB_CONTAINER", raising=False)
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return types.SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+        module.query_db("SELECT 1")
+        cmd = captured["cmd"]
+        assert "nexgate-db-1" in cmd
+        assert "litellm_db" not in cmd
+        assert cmd[cmd.index("-U") + 1] == "nexgate", f"wrong db role: {cmd}"
+        assert cmd[cmd.index("-d") + 1] == "nexgate", f"wrong db name: {cmd}"
+
+    def test_container_logs_target_nexgate_litellm_container(self, monkeypatch) -> None:
+        module = _load_script("mcp_provider_status")
+        monkeypatch.delenv("NEXGATE_LITELLM_CONTAINER", raising=False)
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            raise module.subprocess.TimeoutExpired(cmd, 5)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+        module.parse_container_logs({})
+        assert "nexgate-litellm-1" in captured["cmd"]
+
+    def test_container_names_respect_env_overrides(self, monkeypatch) -> None:
+        module = _load_script("mcp_provider_status")
+        monkeypatch.setenv("NEXGATE_DB_CONTAINER", "operator-db")
+        monkeypatch.setenv("NEXGATE_LITELLM_CONTAINER", "operator-litellm")
+        captured = []
+
+        def fake_run(cmd, **kwargs):
+            captured.append(cmd)
+            raise module.subprocess.TimeoutExpired(cmd, 5)
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+        module.query_db("SELECT 1")
+        module.parse_container_logs({})
+        assert "operator-db" in captured[0]
+        assert "operator-litellm" in captured[1]
+
+
 @pytest.mark.parametrize("script_name", ["provider_status", "mcp_provider_status"])
 class TestProbeTruthfulness:
     def test_probe_payload_disables_fallbacks(self, script_name) -> None:
