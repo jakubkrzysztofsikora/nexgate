@@ -56,6 +56,40 @@ def load_callback_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     return module
 
 
+STATE_NAMES = {
+    "_anthropic_primary_cooldown_until",
+    "_OAUTH_TOKEN_CACHE",
+    "_ANTHROPIC_FILE_TOKEN_CACHE",
+    "_anthropic_token_state_lock",
+    "_SAVINGS_EVENT_QUEUE",
+    "_SAVINGS_EVENT_WRITER_STARTED",
+    "_MODEL_NAME_TO_PROVIDER",
+    "_MODEL_NAME_MAP_MTIME",
+    "_SAVINGS_EVENT_DROPPED",
+}
+
+
+class _StateForwarding:
+    """After the ccshims split the oauth state lives in ccshims.oauth; the
+    facade still re-exports import-time copies, so tests need reads and
+    writes routed to the owning module."""
+
+    def __init__(self, base: object, state: object) -> None:
+        object.__setattr__(self, "_base", base)
+        object.__setattr__(self, "_state", state)
+
+    def __getattr__(self, name: str) -> object:
+        if name in STATE_NAMES:
+            return getattr(self._state, name)
+        return getattr(self._base, name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in STATE_NAMES:
+            setattr(self._state, name, value)
+        else:
+            setattr(self._base, name, value)
+
+
 @pytest.fixture()
 def callback(monkeypatch: pytest.MonkeyPatch):
     module = load_callback_module(monkeypatch)
@@ -63,7 +97,8 @@ def callback(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ANTHROPIC_FALLBACK_TOKEN", FALLBACK_TOKEN)
     monkeypatch.setattr(module, "_OAUTH_TOKEN_CACHE", {})
     monkeypatch.setattr(module, "_anthropic_primary_cooldown_until", 0.0)
-    return module
+    import ccshims.oauth as state
+    return _StateForwarding(module, state)
 
 
 class TestFallbackTokenRequiresRouterHop:

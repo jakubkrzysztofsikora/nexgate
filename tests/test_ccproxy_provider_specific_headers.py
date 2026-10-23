@@ -57,6 +57,31 @@ def load_callback_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     return module
 
 
+STATE_NAMES = {
+    "_anthropic_primary_cooldown_until",
+    "_OAUTH_TOKEN_CACHE",
+    "_ANTHROPIC_FILE_TOKEN_CACHE",
+    "_anthropic_token_state_lock",
+}
+
+
+class _StateForwarding:
+    def __init__(self, base: object, state: object) -> None:
+        object.__setattr__(self, "_base", base)
+        object.__setattr__(self, "_state", state)
+
+    def __getattr__(self, name: str) -> object:
+        if name in STATE_NAMES:
+            return getattr(self._state, name)
+        return getattr(self._base, name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in STATE_NAMES:
+            setattr(self._state, name, value)
+        else:
+            setattr(self._base, name, value)
+
+
 @pytest.fixture()
 def callback(monkeypatch: pytest.MonkeyPatch):
     module = load_callback_module(monkeypatch)
@@ -64,7 +89,8 @@ def callback(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("ANTHROPIC_FALLBACK_TOKEN", raising=False)
     monkeypatch.setattr(module, "_OAUTH_TOKEN_CACHE", {})
     monkeypatch.setattr(module, "_anthropic_primary_cooldown_until", 0.0)
-    return module
+    import ccshims.oauth as state
+    return _StateForwarding(module, state)
 
 
 def _scoped_list() -> list[dict]:

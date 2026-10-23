@@ -28,6 +28,7 @@ services:
       - ./runtime/state/anthropic:/run/nexgate/anthropic:ro
       - ./runtime/config/ccproxy.yaml:/app/ccproxy.yaml:ro
       - ./runtime/config/ccproxy_callback.py:/app/ccproxy_callback.py:ro
+      - ./runtime/config/ccshims:/app/ccshims:ro
       - ./runtime/config/claude_aware_compression.py:/app/claude_aware_compression.py:ro
       - ./runtime/config/sitecustomize.py:/app/sitecustomize.py:ro
     depends_on:
