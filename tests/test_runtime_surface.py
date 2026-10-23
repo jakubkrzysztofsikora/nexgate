@@ -57,6 +57,15 @@ def test_kimi_code_routes_send_honest_identity() -> None:
     assert not offenders, f"kimi routes fake a Claude client identity: {offenders}"
 
 
+def test_nvidia_trial_routes_stay_out_of_tier_and_fallback_routing() -> None:
+    catalog = yaml.safe_load((ROOT / "runtime/config/litellm.yaml.tmpl").read_text())
+    nvidia = [m["model_name"] for m in catalog["model_list"] if str(m["model_name"]).startswith("nvidia/")]
+    assert nvidia, "nvidia trial routes missing — matrix labeling assumes they exist"
+    routing_blob = yaml.safe_dump({k: v for k, v in catalog.items() if k != "model_list"})
+    leaked = [name for name in nvidia if name in routing_blob]
+    assert not leaked, f"nvidia trial routes leaked into tier/fallback routing: {leaked}"
+
+
 def test_portable_litellm_catalog_preserves_the_migration_surface() -> None:
     catalog_text = (ROOT / "runtime/config/litellm.yaml.tmpl").read_text()
     catalog = yaml.safe_load(catalog_text)

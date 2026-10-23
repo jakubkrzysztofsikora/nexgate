@@ -6,6 +6,9 @@ environment variable has a non-placeholder value in the ignored `.env`.
 The ChatGPT subscription and virtual router aliases additionally require the
 NEXGATE_ENABLE_SUBSCRIPTION_ROUTES=true switch. This prevents a new stack from
 starting an OAuth device flow before the operator has deliberately configured it.
+The `nvidia/*` routes are NVIDIA API trial tier only — no production use and
+content may train their models. A test pins them out of tier and fallback
+routing; call them by explicit alias if you deliberately accept the terms.
 Do not add credentials to this file.
 
 The `quick-research` A2A spike is an agent registry entry, not a model catalog
