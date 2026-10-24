@@ -85,12 +85,12 @@ Out of scope:
 **Steps**:
 1. Call a Claude group while primary is limited.
 2. Inspect gateway logs for fallback target.
-**Expected**: exactly one retry on `fallback-claude-*` (secondary api_base); if that also fails, request ends — never routed to kimi/qwen/glm wildcard chain.
+**Expected**: 429 propagates to client unchanged; logs show `Available Model Group Fallbacks=[]` — claude groups are terminal-empty by design (no `fallback-claude-*` groups exist in the rendered config; never routed to kimi/qwen/glm wildcard chain).
 
 ### TC-012: Terminal groups never inherit wildcard fallback [P1]
 **Category**: Edge case
 **Steps**:
-1. Force failure on `coopforge/bielik-minitron-7b`, `circit-gateway`, and one `fallback-claude-*` group (bogus key in dry-run env).
+1. Force failure on `coopforge/bielik-minitron-7b`, `circit-gateway`, and one terminal-empty claude group (e.g. `claude-haiku-4-5-20251001`).
 **Expected**: immediate error to client; logs show no `*`-wildcard fallback attempt (explicit `[]` honored).
 
 ### TC-013: Context-window overflow escalates Claude to [1m] [P2]
@@ -255,10 +255,10 @@ Out of scope:
 | Groups & aliases | TC-001..003 | TC-004, 005 | — | — |
 | Fallbacks | TC-010, 011, 012, 022, 023 | — | TC-013..015 | — |
 | minimax-m3-flash + OMP | TC-020, 021, 024 | — | — | — |
-| ccshims split | TC-030..033 | — | TC-031 (state) | — |
+| ccshims split | TC-030..033 | — | — | — |
 | Cache-control hook | TC-040 | — | TC-041 | — |
 | Config pipeline & docs | TC-050..052 | — | TC-053 | — |
-| Resilience | — | TC-060 | TC-062 | TC-061, 063 |
+| Resilience | — | TC-060 | TC-062 | TC-061, TC-063 (P2) |
 
 ## Automation mapping (already green as of 2026-10-24)
 
