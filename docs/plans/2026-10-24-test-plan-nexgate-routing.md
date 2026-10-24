@@ -85,12 +85,12 @@ Out of scope:
 **Steps**:
 1. Call a Claude group while primary is limited.
 2. Inspect gateway logs for fallback target.
-**Expected**: 429 propagates to client unchanged; logs show `Available Model Group Fallbacks=[]` — claude groups are terminal-empty by design (no `fallback-claude-*` groups exist in the rendered config; never routed to kimi/qwen/glm wildcard chain).
+**Expected**: 429 propagates to client unchanged; logs show `Available Model Group Fallbacks=[fallback-claude-haiku-4-5-20251001]` — the template wires each claude group to the same model on the secondary Anthropic credential (`fallback-claude-*`, terminal-empty). When ANTHROPIC_FALLBACK_TOKEN is unset the renderer prunes those hops, so the rendered config shows claude groups as terminal `[]` (current operator env). Never routed to kimi/qwen/glm wildcard chain.
 
 ### TC-012: Terminal groups never inherit wildcard fallback [P1]
 **Category**: Edge case
 **Steps**:
-1. Force failure on `coopforge/bielik-minitron-7b`, `circit-gateway`, and one terminal-empty claude group (e.g. `claude-haiku-4-5-20251001`).
+1. Force failure on `coopforge/bielik-minitron-7b`, `circit-gateway`, and one `fallback-claude-*` group (e.g. `fallback-claude-haiku-4-5-20251001`).
 **Expected**: immediate error to client; logs show no `*`-wildcard fallback attempt (explicit `[]` honored).
 
 ### TC-013: Context-window overflow escalates Claude to [1m] [P2]
